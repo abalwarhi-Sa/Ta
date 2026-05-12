@@ -1,0 +1,30 @@
+# قواعد البيانات والبيانات المحلية
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# ملفات Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# البيئات الافتراضية
+.venv/
+venv/
+env/
+ENV/
+
+# ملفات Streamlit الحساسة
+.streamlit/secrets.toml
+
+# ملفات النظام
+.DS_Store
+Thumbs.db
+*.log
+
+# المحررات
+.vscode/
+.idea/
+*.swp
