@@ -276,8 +276,8 @@ if r_logo_file is not None:
 l_logo_b64 = st.session_state.get('l_logo_b64', '')
 r_logo_b64 = st.session_state.get('r_logo_b64', '')
 
-org_name      = st.sidebar.text_input("اسم الجهة / المؤسسة", value="وزارة الشؤون البلدية")
-report_footer = st.sidebar.text_input("نص التذييل / Footer Text", value="سري - للاستخدام الرسمي فقط")
+org_name      = st.sidebar.text_input("اسم الجهة / المؤسسة", value=" ")
+report_footer = st.sidebar.text_input("نص التذييل / Footer Text", value="")
 
 is_admin = st.session_state.user_role == Role.ADMIN
 
