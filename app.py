@@ -23,6 +23,343 @@ MAX_IMG_SIZE_MB = 5
 MAX_LOGIN_ATTEMPTS = 5
 MIN_PASSWORD_LEN = 6
 
+# ===================== نظام الترجمة / Translation System =====================
+LANGS = {
+    "ar": {
+        # Login
+        "login_title": "🔐 تسجيل دخول النظام",
+        "username": "اسم المستخدم",
+        "username_ph": "أدخل اسم المستخدم",
+        "password": "كلمة المرور",
+        "password_ph": "أدخل كلمة المرور",
+        "login_btn": "دخول",
+        "login_failed": "⚠️ بيانات الدخول غير صحيحة",
+        "attempts_left": "🔁 المحاولات المتبقية: {}",
+        "max_attempts": "⛔ تم تجاوز الحد الأقصى للمحاولات ({}). أعد تشغيل التطبيق.",
+        # Sidebar
+        "lang_label": "🌐 اللغة",
+        "sb_title": "🖼️ إعدادات التقرير",
+        "logo_right": "شعار اليمين",
+        "logo_left": "شعار اليسار",
+        "org_name_label": "اسم الجهة / المؤسسة",
+        "footer_text_label": "نص التذييل",
+        "logout": "🚪 تسجيل الخروج",
+        "admin_only": "⛔ هذه الصفحة للمدير فقط.",
+        "welcome": "مرحباً بك يا {} ({})",
+        # Menu
+        "go_to": "انتقل إلى:",
+        "m_dashboard": "📊 لوحة المؤشرات",
+        "m_maintenance": "🛠️ الصيانة",
+        "m_cleaning": "🧹 النظافة",
+        "m_daily": "✅ المهام اليومية",
+        "m_report_maint": "📋 تقرير بلاغ فردي",
+        "m_report_clean": "🧽 تقرير نظافة فردي",
+        "m_report_daily": "🧾 تقرير الجولة اليومية",
+        "m_report_monthly": "📅 التقرير الشهري",
+        "m_users": "👥 إدارة المستخدمين",
+        # Dashboard
+        "dashboard_h": "📊 حالة العمل الحالية",
+        "metric_total": "إجمالي البلاغات",
+        "metric_pending": "بانتظار الإصلاح",
+        "metric_done": "تم الإصلاح",
+        "metric_cleaning": "مهام النظافة",
+        "metric_inspections": "الجولات التفقدية",
+        # Maintenance
+        "maint_h": "🛠️ إدارة مهام الصيانة",
+        "tab_new_report": "📝 فتح بلاغ جديد",
+        "tab_close_report": "🔧 إغلاق بلاغ معلق",
+        "dept": "القسم",
+        "location_label": "الموقع (رقم المكتب / الدور)",
+        "problem_desc": "وصف المشكلة",
+        "photo_before_label": "صورة العطل (قبل)",
+        "submit_report": "إرسال البلاغ",
+        "report_sent": "✅ تم إرسال البلاغ بنجاح",
+        "fill_required": "يرجى تعبئة الموقع والوصف",
+        "select_report": "اختر البلاغ المراد إغلاقه",
+        "action_taken": "الإجراء المتخذ",
+        "photo_after_label": "صورة الإنجاز (بعد)",
+        "close_report": "إغلاق البلاغ",
+        "report_closed": "✅ تم إغلاق البلاغ بنجاح",
+        "no_pending": "لا توجد بلاغات معلقة حالياً.",
+        # Cleaning
+        "clean_h": "🧹 سجل النظافة اليومي",
+        "tab_add_record": "📝 إضافة سجل",
+        "tab_view_records": "📂 عرض السجلات",
+        "clean_area": "منطقة التنظيف",
+        "clean_type": "نوع التنظيف",
+        "before_clean": "قبل التنظيف",
+        "after_clean": "بعد التنظيف",
+        "save_record": "حفظ السجل",
+        "saved": "✨ تم الحفظ بنجاح",
+        "enter_area": "يرجى إدخال منطقة التنظيف",
+        "no_records": "لا توجد سجلات نظافة حالياً.",
+        "view_photos": "🖼️ عرض الصور",
+        "select_record_view": "اختر السجل لعرض صوره",
+        "no_photo": "لا توجد صورة",
+        "before_lbl": "**⚠️ قبل التنظيف**",
+        "after_lbl": "**✅ بعد التنظيف**",
+        # Daily Inspections
+        "daily_h": "✅ الجولات اليومية للتفقّد",
+        "tab_new_round": "📋 جولة جديدة",
+        "tab_daily_log": "📂 السجل اليومي",
+        "inspection_info": "💡 التقط صورة لكل بند تشيّك عليه — هذا يؤكّد أنك نفّذت المهمة فعلياً.",
+        "general_notes": "ملاحظات عامة (اختياري)",
+        "status_label": "الحالة",
+        "notes_label": "ملاحظات",
+        "check_photo": "📷 صورة التشييك",
+        "save_inspection": "🚀 حفظ الجولة التفقدية",
+        "no_item_checked": "⚠️ لم يتم تشييك أي بند. اختر حالة لبند واحد على الأقل.",
+        "photo_required": "⚠️ يجب التقاط صورة لكل بند تم تشييكه. الصور الناقصة: {}",
+        "inspection_saved": "✅ تم حفظ الجولة التفقدية ({} بند). رقم الجولة: DC-{}",
+        "no_inspections": "لا توجد جولات تفقدية سابقة.",
+        "view_details": "🔍 عرض تفاصيل جولة",
+        "select_round": "اختر الجولة",
+        # User Management
+        "users_h": "👥 إدارة المستخدمين",
+        "current_users": "المستخدمون الحاليون",
+        "add_user_h": "➕ إضافة مستخدم جديد",
+        "add_btn": "إضافة",
+        "fill_all": "يرجى تعبئة جميع الحقول",
+        "pwd_too_short": "⚠️ يجب أن تكون كلمة المرور {} أحرف على الأقل",
+        "user_added": "✅ تم إضافة المستخدم '{}' بنجاح",
+        "user_exists": "⚠️ اسم المستخدم موجود مسبقاً",
+        "delete_user_h": "🗑️ حذف مستخدم",
+        "select_to_delete": "اختر المستخدم للحذف",
+        "delete_btn": "حذف",
+        "user_deleted": "✅ تم حذف المستخدم '{}'",
+        "no_other_users": "لا يوجد مستخدمون آخرون للحذف.",
+        "change_pwd_h": "🔑 تغيير كلمة مرور مستخدم",
+        "select_user": "اختر المستخدم",
+        "new_pwd": "كلمة المرور الجديدة",
+        "update_btn": "تحديث",
+        "enter_new_pwd": "أدخل كلمة المرور الجديدة",
+        "pwd_updated": "✅ تم تحديث كلمة مرور '{}'",
+        "role": "الصلاحية",
+        # Reports
+        "report_single_h": "📋 تقرير بلاغ فردي",
+        "no_reports": "لا توجد بلاغات مسجلة.",
+        "select_report_id": "اختر رقم البلاغ",
+        "download_html": "📥 تحميل التقرير (HTML)",
+        "report_clean_h": "🧽 تقرير نظافة فردي",
+        "no_clean_records": "لا توجد سجلات نظافة مسجّلة.",
+        "select_record": "اختر السجل",
+        "report_daily_h": "🧾 تقرير الجولة اليومية",
+        "no_inspections_2": "لا توجد جولات تفقدية مسجّلة.",
+        "report_monthly_h": "📅 التقرير الشهري",
+        "from_date": "من تاريخ",
+        "to_date": "إلى تاريخ",
+        "generate_report": "🔍 استخراج التقرير",
+        "download_monthly": "📥 تحميل التقرير الشهري (HTML)",
+        "download_cleaning": "📥 تحميل تقرير النظافة (HTML)",
+        "to_official_caption": "ℹ️ لإصدار تقرير رسمي مع التوقيع، انتقل إلى تقرير نظافة فردي.",
+        # Defaults
+        "default_org": "وزارة الشؤون البلدية",
+        "default_footer": "سري - للاستخدام الرسمي فقط",
+        # Status display (for translating stored Arabic values)
+        "disp_pending": "قيد الانتظار",
+        "disp_done": "تم الإصلاح",
+        "disp_ok": "سليم",
+        "disp_needs_fix": "يحتاج صيانة",
+        "disp_admin": "مدير",
+        "disp_tech": "فني",
+    },
+    "en": {
+        "login_title": "🔐 System Login",
+        "username": "Username",
+        "username_ph": "Enter username",
+        "password": "Password",
+        "password_ph": "Enter password",
+        "login_btn": "Login",
+        "login_failed": "⚠️ Invalid credentials",
+        "attempts_left": "🔁 Attempts remaining: {}",
+        "max_attempts": "⛔ Max login attempts ({}) exceeded. Please restart the app.",
+        "lang_label": "🌐 Language",
+        "sb_title": "🖼️ Report Settings",
+        "logo_right": "Right Logo",
+        "logo_left": "Left Logo",
+        "org_name_label": "Organization Name",
+        "footer_text_label": "Footer Text",
+        "logout": "🚪 Logout",
+        "admin_only": "⛔ Admin only.",
+        "welcome": "Welcome, {} ({})",
+        "go_to": "Go to:",
+        "m_dashboard": "📊 Dashboard",
+        "m_maintenance": "🛠️ Maintenance",
+        "m_cleaning": "🧹 Cleaning",
+        "m_daily": "✅ Daily Tasks",
+        "m_report_maint": "📋 Maintenance Report",
+        "m_report_clean": "🧽 Cleaning Report",
+        "m_report_daily": "🧾 Daily Inspection Report",
+        "m_report_monthly": "📅 Monthly Report",
+        "m_users": "👥 User Management",
+        "dashboard_h": "📊 Current Status",
+        "metric_total": "Total Reports",
+        "metric_pending": "Pending",
+        "metric_done": "Completed",
+        "metric_cleaning": "Cleaning Tasks",
+        "metric_inspections": "Inspections",
+        "maint_h": "🛠️ Maintenance Management",
+        "tab_new_report": "📝 New Report",
+        "tab_close_report": "🔧 Close Pending",
+        "dept": "Department",
+        "location_label": "Location (Office No. / Floor)",
+        "problem_desc": "Problem Description",
+        "photo_before_label": "Issue Photo (Before)",
+        "submit_report": "Submit Report",
+        "report_sent": "✅ Report submitted successfully",
+        "fill_required": "Please fill in location and description",
+        "select_report": "Select report to close",
+        "action_taken": "Action Taken",
+        "photo_after_label": "Completion Photo (After)",
+        "close_report": "Close Report",
+        "report_closed": "✅ Report closed successfully",
+        "no_pending": "No pending reports.",
+        "clean_h": "🧹 Daily Cleaning Log",
+        "tab_add_record": "📝 Add Record",
+        "tab_view_records": "📂 View Records",
+        "clean_area": "Cleaning Area",
+        "clean_type": "Cleaning Type",
+        "before_clean": "Before Cleaning",
+        "after_clean": "After Cleaning",
+        "save_record": "Save Record",
+        "saved": "✨ Saved successfully",
+        "enter_area": "Please enter the cleaning area",
+        "no_records": "No cleaning records yet.",
+        "view_photos": "🖼️ View Photos",
+        "select_record_view": "Select record to view photos",
+        "no_photo": "No photo",
+        "before_lbl": "**⚠️ Before Cleaning**",
+        "after_lbl": "**✅ After Cleaning**",
+        "daily_h": "✅ Daily Inspection Rounds",
+        "tab_new_round": "📋 New Round",
+        "tab_daily_log": "📂 Daily Log",
+        "inspection_info": "💡 Take a photo of each item you check — this proves you actually performed the task.",
+        "general_notes": "General Notes (Optional)",
+        "status_label": "Status",
+        "notes_label": "Notes",
+        "check_photo": "📷 Inspection Photo",
+        "save_inspection": "🚀 Save Inspection Round",
+        "no_item_checked": "⚠️ No item checked. Choose a status for at least one item.",
+        "photo_required": "⚠️ A photo is required for each checked item. Missing photos: {}",
+        "inspection_saved": "✅ Inspection saved ({} items). Round ID: DC-{}",
+        "no_inspections": "No previous inspection rounds.",
+        "view_details": "🔍 View Round Details",
+        "select_round": "Select round",
+        "users_h": "👥 User Management",
+        "current_users": "Current Users",
+        "add_user_h": "➕ Add New User",
+        "add_btn": "Add",
+        "fill_all": "Please fill all fields",
+        "pwd_too_short": "⚠️ Password must be at least {} characters",
+        "user_added": "✅ User '{}' added successfully",
+        "user_exists": "⚠️ Username already exists",
+        "delete_user_h": "🗑️ Delete User",
+        "select_to_delete": "Select user to delete",
+        "delete_btn": "Delete",
+        "user_deleted": "✅ User '{}' deleted",
+        "no_other_users": "No other users to delete.",
+        "change_pwd_h": "🔑 Change User Password",
+        "select_user": "Select user",
+        "new_pwd": "New Password",
+        "update_btn": "Update",
+        "enter_new_pwd": "Enter new password",
+        "pwd_updated": "✅ Password for '{}' updated",
+        "role": "Role",
+        "report_single_h": "📋 Single Report",
+        "no_reports": "No reports recorded.",
+        "select_report_id": "Select report ID",
+        "download_html": "📥 Download Report (HTML)",
+        "report_clean_h": "🧽 Single Cleaning Report",
+        "no_clean_records": "No cleaning records.",
+        "select_record": "Select record",
+        "report_daily_h": "🧾 Daily Inspection Report",
+        "no_inspections_2": "No inspection rounds recorded.",
+        "report_monthly_h": "📅 Monthly Report",
+        "from_date": "From",
+        "to_date": "To",
+        "generate_report": "🔍 Generate Report",
+        "download_monthly": "📥 Download Monthly Report (HTML)",
+        "download_cleaning": "📥 Download Cleaning Report (HTML)",
+        "to_official_caption": "ℹ️ For an official report with signatures, go to Single Cleaning Report.",
+        "default_org": "Municipal Affairs Ministry",
+        "default_footer": "Confidential - Official Use Only",
+        "disp_pending": "Pending",
+        "disp_done": "Completed",
+        "disp_ok": "OK",
+        "disp_needs_fix": "Needs Repair",
+        "disp_admin": "Admin",
+        "disp_tech": "Technician",
+    },
+}
+
+
+def t(key, *args):
+    """Translation helper. Pass format args for placeholder strings."""
+    if 'lang' not in st.session_state:
+        st.session_state.lang = 'ar'
+    lang = st.session_state.get('lang', 'ar')
+    val = LANGS.get(lang, LANGS['ar']).get(key, key)
+    if args:
+        try:
+            return val.format(*args)
+        except (IndexError, KeyError):
+            return val
+    return val
+
+
+def tr_status(value):
+    """Translate stored Arabic status values to current language display."""
+    mapping = {
+        Status.PENDING: 'disp_pending',
+        Status.DONE: 'disp_done',
+        CheckStatus.OK: 'disp_ok',
+        CheckStatus.NEEDS_FIX: 'disp_needs_fix',
+    }
+    return t(mapping.get(value, '')) if value in mapping else (value or '—')
+
+
+# ===================== جدول ترجمة القيم المخزّنة =====================
+DISPLAY_MAP_EN = {
+    # بنود التفقّد / Inspection items
+    "💡 الإنارة": "💡 Lighting",
+    "❄️ المكيفات": "❄️ Air Conditioners",
+    "🚻 دورات المياه": "🚻 Restrooms",
+    "⚡ غرف الكهرباء": "⚡ Electrical Rooms",
+    "🛗 المصاعد": "🛗 Elevators",
+    "🚰 خزان الصرف الصحي": "🚰 Sewage Tank",
+    "🌀 مراوح الشفط": "🌀 Exhaust Fans",
+    # الحالات / Status values
+    "قيد الانتظار": "Pending",
+    "تم الإصلاح": "Completed",
+    "سليم": "OK",
+    "يحتاج صيانة": "Needs Repair",
+    "—": "—",
+    # الصلاحيات / Roles
+    "مدير": "Admin",
+    "فني": "Technician",
+    # أقسام الصيانة / Maintenance departments
+    "تكييف": "AC",
+    "كهرباء": "Electrical",
+    "سباكة": "Plumbing",
+    "نجارة": "Carpentry",
+    "أخرى": "Other",
+    # أنواع التنظيف / Cleaning types
+    "يومي روتيني": "Daily Routine",
+    "تنظيف عميق": "Deep Cleaning",
+    "تلميع رخام": "Marble Polishing",
+    "واجهات": "Facades",
+}
+
+
+def tr_display(value):
+    """ترجمة القيم المخزّنة بالعربية لعرضها باللغة الحالية."""
+    if value is None or value == "":
+        return "—"
+    if st.session_state.get('lang', 'ar') == 'en':
+        return DISPLAY_MAP_EN.get(str(value), str(value))
+    return str(value)
+
+
 # بنود الجولة اليومية للتفقّد
 CHECKLIST_ITEMS = [
     "💡 الإنارة",
@@ -37,7 +374,7 @@ CHECKLIST_ITEMS = [
 
 class Status:
     PENDING = "قيد الانتظار"
-    DONE = "تم الإصلاح"
+    DONE = t("metric_done")
 
 
 class Role:
@@ -142,7 +479,7 @@ def render_img(b64: str, style: str, placeholder_html: str = None) -> str:
 def require_admin():
     """يوقف تنفيذ الصفحة إذا لم يكن المستخدم مديراً (تحقق خلفي حقيقي)."""
     if st.session_state.get('user_role') != Role.ADMIN:
-        st.error("⛔ هذه الصفحة للمدير فقط.")
+        st.error(t("admin_only"))
         st.stop()
 
 
@@ -203,27 +540,44 @@ init_db()
 
 # ===================== نظام تسجيل الدخول =====================
 
+# ===================== مفتاح تبديل اللغة / Language Toggle =====================
+if 'lang' not in st.session_state:
+    st.session_state.lang = 'ar'
+
+_lang_options = {"🇸🇦 العربية": "ar", "🇬🇧 English": "en"}
+_current_display = "🇸🇦 العربية" if st.session_state.lang == 'ar' else "🇬🇧 English"
+_new_display = st.sidebar.selectbox(
+    "🌐 اللغة / Language",
+    options=list(_lang_options.keys()),
+    index=list(_lang_options.keys()).index(_current_display),
+    key="lang_selector"
+)
+_new_lang = _lang_options[_new_display]
+if _new_lang != st.session_state.lang:
+    st.session_state.lang = _new_lang
+    st.rerun()
+
 if 'login_attempts' not in st.session_state:
     st.session_state.login_attempts = 0
 
 if 'logged_in' not in st.session_state:
     st.markdown(
-        "<h2 style='text-align:center;'>🔐 تسجيل دخول النظام / System Login</h2>",
+        f"<h2 style='text-align:center;'>{t('login_title')}</h2>",
         unsafe_allow_html=True
     )
 
     if st.session_state.login_attempts >= MAX_LOGIN_ATTEMPTS:
-        st.error(f"⛔ تم تجاوز الحد الأقصى للمحاولات ({MAX_LOGIN_ATTEMPTS}). أعد تشغيل التطبيق للمحاولة مجدداً.")
+        st.error(t("max_attempts", MAX_LOGIN_ATTEMPTS))
         st.stop()
 
-    u = st.text_input("اسم المستخدم / Username", placeholder="أدخل اسم المستخدم / Enter username")
-    p = st.text_input("كلمة المرور / Password", type="password", placeholder="أدخل كلمة المرور / Enter password")
+    u = st.text_input(t("username"), placeholder=t("username_ph"))
+    p = st.text_input(t("password"), type="password", placeholder=t("password_ph"))
 
     if st.session_state.login_attempts > 0:
         remaining = MAX_LOGIN_ATTEMPTS - st.session_state.login_attempts
-        st.caption(f"🔁 المحاولات المتبقية: {remaining}")
+        st.caption(t("attempts_left", remaining))
 
-    if st.button("دخول / Login", use_container_width=True):
+    if st.button(t("login_btn"), use_container_width=True):
         ok = False
         role = None
         with get_db() as conn:
@@ -257,16 +611,16 @@ if 'logged_in' not in st.session_state:
             st.rerun()
         else:
             st.session_state.login_attempts += 1
-            st.error("⚠️ بيانات الدخول غير صحيحة")
+            st.error(t("login_failed"))
     st.stop()
 
 # ===================== الشريط الجانبي =====================
 
-st.sidebar.title("🖼️ إعدادات التقرير / Report Settings")
+st.sidebar.title(t("sb_title"))
 
 # الشعارات: تُحفظ في الجلسة حتى لا تضيع عند كل rerun
-l_logo_file = st.sidebar.file_uploader("شعار اليمين / Right Logo", type=['png', 'jpg', 'jpeg'], key='l_logo')
-r_logo_file = st.sidebar.file_uploader("شعار اليسار / Left Logo", type=['png', 'jpg', 'jpeg'], key='r_logo')
+l_logo_file = st.sidebar.file_uploader(t("logo_right"), type=['png', 'jpg', 'jpeg'], key='l_logo')
+r_logo_file = st.sidebar.file_uploader(t("logo_left"), type=['png', 'jpg', 'jpeg'], key='r_logo')
 
 if l_logo_file is not None:
     st.session_state.l_logo_b64 = base64.b64encode(l_logo_file.getvalue()).decode()
@@ -276,30 +630,30 @@ if r_logo_file is not None:
 l_logo_b64 = st.session_state.get('l_logo_b64', '')
 r_logo_b64 = st.session_state.get('r_logo_b64', '')
 
-org_name      = st.sidebar.text_input("اسم الجهة / المؤسسة", value=" ")
-report_footer = st.sidebar.text_input("نص التذييل / Footer Text", value="")
+org_name      = st.sidebar.text_input("اسم الجهة / المؤسسة", value=t("default_org"))
+report_footer = st.sidebar.text_input(t("footer_text_label"), value=t("default_footer"))
 
 is_admin = st.session_state.user_role == Role.ADMIN
 
 # القائمة حسب الصلاحية
 if is_admin:
     menu = [
-        "📊 لوحة المؤشرات / Dashboard", "🛠️ الصيانة / Maintenance", "🧹 النظافة / Cleaning",
-        "✅ المهام اليومية / Daily Tasks",
-        "📋 تقرير بلاغ فردي / Maintenance Report", "🧽 تقرير نظافة فردي / Cleaning Report",
-        "🧾 تقرير الجولة اليومية / Daily Inspection Report",
-        "📅 التقرير الشهري / Monthly Report", "👥 إدارة المستخدمين / User Management"
+        t("m_dashboard"), t("m_maintenance"), t("m_cleaning"),
+        t("m_daily"),
+        t("m_report_maint"), t("m_report_clean"),
+        t("m_report_daily"),
+        t("m_report_monthly"), t("m_users")
     ]
 else:
-    menu = ["🛠️ الصيانة / Maintenance", "🧹 النظافة / Cleaning", "✅ المهام اليومية / Daily Tasks"]
+    menu = [t("m_maintenance"), t("m_cleaning"), t("m_daily")]
 
-choice = st.selectbox("انتقل إلى: / Go to:", menu)
+choice = st.selectbox(t("go_to"), menu)
 
 # ===================== لوحة المؤشرات (مدير فقط) =====================
 
-if choice == "📊 لوحة المؤشرات / Dashboard":
+if choice == t("m_dashboard"):
     require_admin()
-    st.header("📊 حالة العمل الحالية")
+    st.header(t("dashboard_h"))
     with get_db() as conn:
         m_count = conn.execute("SELECT COUNT(*) FROM maintenance").fetchone()[0]
         c_count = conn.execute("SELECT COUNT(*) FROM cleaning").fetchone()[0]
@@ -314,27 +668,27 @@ if choice == "📊 لوحة المؤشرات / Dashboard":
         ).fetchone()[0]
 
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("إجمالي البلاغات", m_count)
-    col2.metric("بانتظار الإصلاح", pending)
-    col3.metric("تم الإصلاح", done)
-    col4.metric("مهام النظافة", c_count)
-    col5.metric("الجولات التفقدية", dc_batches)
+    col1.metric(t("metric_total"), m_count)
+    col2.metric(t("metric_pending"), pending)
+    col3.metric(t("metric_done"), done)
+    col4.metric(t("metric_cleaning"), c_count)
+    col5.metric(t("metric_inspections"), dc_batches)
     st.divider()
-    st.info(f"مرحباً بك يا {st.session_state.username} ({st.session_state.user_role})")
+    st.info(t("welcome", st.session_state.username, st.session_state.user_role))
 
 # ===================== قسم الصيانة =====================
 
-elif choice == "🛠️ الصيانة / Maintenance":
-    st.header("🛠️ إدارة مهام الصيانة")
-    t1, t2 = st.tabs(["📝 فتح بلاغ جديد", "🔧 إغلاق بلاغ معلق"])
+elif choice == t("m_maintenance"):
+    st.header(t("maint_h"))
+    t1, t2 = st.tabs([t("tab_new_report"), t("tab_close_report")])
 
     with t1:
         with st.form("add_maintenance"):
-            dept  = st.selectbox("القسم", ["تكييف", "كهرباء", "سباكة", "نجارة", "أخرى"])
-            loc   = st.text_input("الموقع (رقم المكتب / الدور)")
-            desc  = st.text_area("وصف المشكلة")
-            img_b = st.file_uploader("صورة العطل (قبل)", type=['jpg', 'png', 'jpeg'])
-            if st.form_submit_button("إرسال البلاغ", use_container_width=True):
+            dept  = st.selectbox(t("dept"), ["تكييف", "كهرباء", "سباكة", "نجارة", "أخرى"], format_func=tr_display)
+            loc   = st.text_input(t("location_label"))
+            desc  = st.text_area(t("problem_desc"))
+            img_b = st.file_uploader(t("photo_before_label"), type=['jpg', 'png', 'jpeg'])
+            if st.form_submit_button(t("submit_report"), use_container_width=True):
                 if loc and desc:
                     with get_db() as conn:
                         conn.execute(
@@ -345,9 +699,9 @@ elif choice == "🛠️ الصيانة / Maintenance":
                                 dept, loc, desc, Status.PENDING, file_to_base64(img_b)
                             )
                         )
-                    st.success("✅ تم إرسال البلاغ بنجاح")
+                    st.success(t("report_sent"))
                 else:
-                    st.warning("يرجى تعبئة الموقع والوصف")
+                    st.warning(t("fill_required"))
 
     with t2:
         with get_db() as conn:
@@ -360,12 +714,12 @@ elif choice == "🛠️ الصيانة / Maintenance":
                 f"#{row['id']} - {row['office_name']}": row['id']
                 for _, row in pending_tasks.iterrows()
             }
-            selected = st.selectbox("اختر البلاغ المراد إغلاقه", list(options.keys()))
+            selected = st.selectbox(t("select_report"), list(options.keys()))
             task_id  = options[selected]
             with st.form("close_task"):
-                action = st.text_area("الإجراء المتخذ")
-                img_a  = st.file_uploader("صورة الإنجاز (بعد)", type=['jpg', 'png', 'jpeg'])
-                if st.form_submit_button("إغلاق البلاغ", use_container_width=True):
+                action = st.text_area(t("action_taken"))
+                img_a  = st.file_uploader(t("photo_after_label"), type=['jpg', 'png', 'jpeg'])
+                if st.form_submit_button(t("close_report"), use_container_width=True):
                     with get_db() as conn:
                         conn.execute(
                             "UPDATE maintenance "
@@ -376,27 +730,28 @@ elif choice == "🛠️ الصيانة / Maintenance":
                                 st.session_state.username, task_id
                             )
                         )
-                    st.success("✅ تم إغلاق البلاغ بنجاح")
+                    st.success(t("report_closed"))
                     st.rerun()
         else:
-            st.info("لا توجد بلاغات معلقة حالياً.")
+            st.info(t("no_pending"))
 
 # ===================== قسم النظافة =====================
 
-elif choice == "🧹 النظافة / Cleaning":
-    st.header("🧹 سجل النظافة اليومي")
-    t1, t2 = st.tabs(["📝 إضافة سجل", "📂 عرض السجلات"])
+elif choice == t("m_cleaning"):
+    st.header(t("clean_h"))
+    t1, t2 = st.tabs([t("tab_add_record"), t("tab_view_records")])
 
     with t1:
         with st.form("cleaning_form"):
-            area    = st.text_input("منطقة التنظيف")
+            area    = st.text_input(t("clean_area"))
             c_type  = st.selectbox(
-                "نوع التنظيف",
-                ["يومي روتيني", "تنظيف عميق", "تلميع رخام", "واجهات"]
+                t("clean_type"),
+                ["يومي روتيني", "تنظيف عميق", "تلميع رخام", "واجهات"],
+                format_func=tr_display,
             )
-            c_img_b = st.file_uploader("قبل التنظيف", type=['jpg', 'png', 'jpeg'])
-            c_img_a = st.file_uploader("بعد التنظيف",  type=['jpg', 'png', 'jpeg'])
-            if st.form_submit_button("حفظ السجل", use_container_width=True):
+            c_img_b = st.file_uploader(t("before_clean"), type=['jpg', 'png', 'jpeg'])
+            c_img_a = st.file_uploader(t("after_clean"),  type=['jpg', 'png', 'jpeg'])
+            if st.form_submit_button(t("save_record"), use_container_width=True):
                 if area:
                     with get_db() as conn:
                         conn.execute(
@@ -409,9 +764,9 @@ elif choice == "🧹 النظافة / Cleaning":
                                 st.session_state.username
                             )
                         )
-                    st.success("✨ تم الحفظ بنجاح")
+                    st.success(t("saved"))
                 else:
-                    st.warning("يرجى إدخال منطقة التنظيف")
+                    st.warning(t("enter_area"))
 
     with t2:
         with get_db() as conn:
@@ -420,66 +775,69 @@ elif choice == "🧹 النظافة / Cleaning":
                 "FROM cleaning ORDER BY id DESC", conn
             )
         if df_cl.empty:
-            st.info("لا توجد سجلات نظافة حالياً.")
+            st.info(t("no_records"))
         else:
             display_df = df_cl[['id', 'date', 'area', 'type', 'tech_name']].copy()
-            display_df.columns = ['الرقم', 'التاريخ', 'المنطقة', 'النوع', 'المنفذ']
+            cols_ar = ['الرقم', 'التاريخ', 'المنطقة', 'النوع', 'المنفذ']
+            cols_en = ['ID', 'Date', 'Area', 'Type', 'Executor']
+            display_df.columns = cols_en if st.session_state.get('lang','ar')=='en' else cols_ar
             st.dataframe(display_df, use_container_width=True, hide_index=True)
 
             st.divider()
-            st.subheader("🖼️ عرض الصور")
+            st.subheader(t("view_photos"))
             options = {
                 f"#{row['id']} - {row['date']} - {row['area']}": row['id']
                 for _, row in df_cl.iterrows()
             }
-            picked = st.selectbox("اختر السجل لعرض صوره", list(options.keys()))
+            picked = st.selectbox(t("select_record_view"), list(options.keys()))
             rec_id = options[picked]
             r = df_cl[df_cl['id'] == rec_id].iloc[0]
 
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown("**⚠️ قبل التنظيف**")
+                st.markdown(t("before_lbl"))
                 if r['img_before']:
                     st.image(base64.b64decode(r['img_before']), use_container_width=True)
                 else:
-                    st.info("لا توجد صورة")
+                    st.info(t("no_photo"))
             with c2:
-                st.markdown("**✅ بعد التنظيف**")
+                st.markdown(t("after_lbl"))
                 if r['img_after']:
                     st.image(base64.b64decode(r['img_after']), use_container_width=True)
                 else:
-                    st.info("لا توجد صورة")
+                    st.info(t("no_photo"))
 
             if is_admin:
                 st.caption("ℹ️ لإصدار تقرير رسمي مع التوقيع، انتقل إلى \"🧽 تقرير نظافة فردي\".")
 
 # ===================== المهام اليومية (الجولات التفقدية) =====================
 
-elif choice == "✅ المهام اليومية / Daily Tasks":
-    st.header("✅ الجولات اليومية للتفقّد")
-    t1, t2 = st.tabs(["📋 جولة جديدة", "📂 السجل اليومي"])
+elif choice == t("m_daily"):
+    st.header(t("daily_h"))
+    t1, t2 = st.tabs([t("tab_new_round"), t("tab_daily_log")])
 
     with t1:
-        st.info("💡 التقط صورة لكل بند تشيّك عليه — هذا يؤكّد أنك نفّذت المهمة فعلياً.")
+        st.info(t("inspection_info"))
 
         with st.form("daily_inspection_form", clear_on_submit=False):
-            general_notes = st.text_area("ملاحظات عامة (اختياري)", key="dc_general_notes")
+            general_notes = st.text_area(t("general_notes"), key="dc_general_notes")
             st.divider()
 
             inspection_data = {}
             for idx, item in enumerate(CHECKLIST_ITEMS):
-                st.markdown(f"#### {item}")
+                st.markdown(f"#### {tr_display(item)}")
                 col_a, col_b = st.columns([1, 1])
                 with col_a:
                     status = st.selectbox(
-                        "الحالة",
+                        t("status_label"),
                         [CheckStatus.NOT_CHECKED, CheckStatus.OK, CheckStatus.NEEDS_FIX],
+                        format_func=tr_display,
                         key=f"dc_status_{idx}",
                     )
-                    notes = st.text_input("ملاحظات", key=f"dc_notes_{idx}")
+                    notes = st.text_input(t("notes_label"), key=f"dc_notes_{idx}")
                 with col_b:
                     photo = st.file_uploader(
-                        "📷 صورة التشييك",
+                        t("check_photo"),
                         type=['jpg', 'png', 'jpeg'],
                         key=f"dc_photo_{idx}"
                     )
@@ -491,7 +849,7 @@ elif choice == "✅ المهام اليومية / Daily Tasks":
                 st.divider()
 
             submitted = st.form_submit_button(
-                "🚀 حفظ الجولة التفقدية",
+                t("save_inspection"),
                 use_container_width=True
             )
 
@@ -500,7 +858,7 @@ elif choice == "✅ المهام اليومية / Daily Tasks":
                            if v['status'] != CheckStatus.NOT_CHECKED}
 
                 if not checked:
-                    st.warning("⚠️ لم يتم تشييك أي بند. اختر حالة لبند واحد على الأقل.")
+                    st.warning(t("no_item_checked"))
                 else:
                     missing_photos = [k for k, v in checked.items() if v['photo'] is None]
                     if missing_photos:
@@ -539,20 +897,22 @@ elif choice == "✅ المهام اليومية / Daily Tasks":
             )
 
         if batches.empty:
-            st.info("لا توجد جولات تفقدية سابقة.")
+            st.info(t("no_inspections"))
         else:
             display_b = batches.copy()
             display_b['batch_id'] = "DC-" + display_b['batch_id'].astype(str)
-            display_b.columns = ['رقم الجولة', 'التاريخ', 'المنفذ', 'عدد البنود']
+            cols_ar = ['رقم الجولة', 'التاريخ', 'المنفذ', 'عدد البنود']
+            cols_en = ['Round ID', 'Date', 'Executor', 'Items Count']
+            display_b.columns = cols_en if st.session_state.get('lang','ar')=='en' else cols_ar
             st.dataframe(display_b, use_container_width=True, hide_index=True)
 
             st.divider()
-            st.subheader("🔍 عرض تفاصيل جولة")
+            st.subheader(t("view_details"))
             batch_options = {
                 f"DC-{row['batch_id']} | {row['date']} | {row['tech_name']}": row['batch_id']
                 for _, row in batches.iterrows()
             }
-            picked = st.selectbox("اختر الجولة", list(batch_options.keys()))
+            picked = st.selectbox(t("select_round"), list(batch_options.keys()))
             batch_id = batch_options[picked]
 
             with get_db() as conn:
@@ -566,29 +926,29 @@ elif choice == "✅ المهام اليومية / Daily Tasks":
                     cols = st.columns([2, 3])
                     with cols[0]:
                         icon = "🟢" if row['status'] == CheckStatus.OK else "🟠"
-                        st.markdown(f"### {row['item']}")
-                        st.markdown(f"**الحالة:** {icon} {row['status']}")
+                        st.markdown(f"### {tr_display(row['item'])}")
+                        st.markdown(f"**" + t("status_label") + ":** {} {}".format(icon, tr_display(row['status'])))
                         if row['notes']:
-                            st.markdown(f"**ملاحظات:** {row['notes']}")
+                            st.markdown(f"**{t('notes_label')}:** {row['notes']}")
                     with cols[1]:
                         if row['photo']:
                             st.image(base64.b64decode(row['photo']), width=320)
                         else:
-                            st.info("لا توجد صورة")
+                            st.info(t("no_photo"))
                     st.divider()
 
 # ===================== تقرير بلاغ فردي (مدير فقط) =====================
 
-elif choice == "📋 تقرير بلاغ فردي / Maintenance Report":
+elif choice == t("m_report_maint"):
     require_admin()
-    st.header("📋 تقرير بلاغ فردي / Maintenance Report")
+    st.header(t("m_report_maint"))
     with get_db() as conn:
         df = pd.read_sql_query("SELECT * FROM maintenance ORDER BY id DESC", conn)
 
     if df.empty:
-        st.info("لا توجد بلاغات مسجلة.")
+        st.info(t("no_reports"))
     else:
-        report_id = st.selectbox("اختر رقم البلاغ", df['id'].tolist())
+        report_id = st.selectbox(t("select_report_id"), df['id'].tolist())
         r = df[df['id'] == report_id].iloc[0]
 
         img_style    = "width:100%;max-height:220px;object-fit:cover;border-radius:6px;border:1px solid #dde3ec;"
@@ -709,7 +1069,7 @@ elif choice == "📋 تقرير بلاغ فردي / Maintenance Report":
         components.html(report_html, height=960, scrolling=True)
         st.write("")
         st.download_button(
-            "📥 تحميل التقرير (HTML)",
+            t("download_html"),
             report_html,
             file_name=f"Report_TQ-{report_id:04d}.html",
             mime="text/html",
@@ -718,20 +1078,20 @@ elif choice == "📋 تقرير بلاغ فردي / Maintenance Report":
 
 # ===================== تقرير نظافة فردي (مدير فقط) =====================
 
-elif choice == "🧽 تقرير نظافة فردي / Cleaning Report":
+elif choice == t("m_report_clean"):
     require_admin()
-    st.header("🧽 تقرير نظافة فردي / Cleaning Report")
+    st.header(t("m_report_clean"))
     with get_db() as conn:
         df = pd.read_sql_query("SELECT * FROM cleaning ORDER BY id DESC", conn)
 
     if df.empty:
-        st.info("لا توجد سجلات نظافة مسجّلة.")
+        st.info(t("no_clean_records"))
     else:
         options = {
             f"#{row['id']} - {row['date']} - {row['area']}": row['id']
             for _, row in df.iterrows()
         }
-        selected = st.selectbox("اختر السجل", list(options.keys()))
+        selected = st.selectbox(t("select_record"), list(options.keys()))
         rec_id = options[selected]
         r = df[df['id'] == rec_id].iloc[0]
 
@@ -845,7 +1205,7 @@ elif choice == "🧽 تقرير نظافة فردي / Cleaning Report":
         components.html(clean_html, height=900, scrolling=True)
         st.write("")
         st.download_button(
-            "📥 تحميل تقرير النظافة (HTML)",
+            t("download_cleaning"),
             clean_html,
             file_name=f"Cleaning_CL-{rec_id:04d}.html",
             mime="text/html",
@@ -854,9 +1214,9 @@ elif choice == "🧽 تقرير نظافة فردي / Cleaning Report":
 
 # ===================== تقرير الجولة اليومية (مدير فقط) =====================
 
-elif choice == "🧾 تقرير الجولة اليومية / Daily Inspection Report":
+elif choice == t("m_report_daily"):
     require_admin()
-    st.header("🧾 تقرير الجولة اليومية / Daily Inspection Report")
+    st.header(t("m_report_daily"))
 
     with get_db() as conn:
         batches = pd.read_sql_query(
@@ -866,13 +1226,13 @@ elif choice == "🧾 تقرير الجولة اليومية / Daily Inspection R
         )
 
     if batches.empty:
-        st.info("لا توجد جولات تفقدية مسجّلة.")
+        st.info(t("no_inspections_2"))
     else:
         batch_options = {
             f"DC-{row['batch_id']} | {row['date']} | {row['tech_name']}": row['batch_id']
             for _, row in batches.iterrows()
         }
-        selected = st.selectbox("اختر الجولة", list(batch_options.keys()))
+        selected = st.selectbox(t("select_round"), list(batch_options.keys()))
         batch_id = batch_options[selected]
 
         with get_db() as conn:
@@ -1011,7 +1371,7 @@ elif choice == "🧾 تقرير الجولة اليومية / Daily Inspection R
         components.html(daily_html, height=1100, scrolling=True)
         st.write("")
         st.download_button(
-            "📥 تحميل التقرير (HTML)",
+            t("download_html"),
             daily_html,
             file_name=f"DailyCheck_DC-{batch_id}.html",
             mime="text/html",
@@ -1020,17 +1380,17 @@ elif choice == "🧾 تقرير الجولة اليومية / Daily Inspection R
 
 # ===================== التقرير الشهري (مدير فقط) =====================
 
-elif choice == "📅 التقرير الشهري / Monthly Report":
+elif choice == t("m_report_monthly"):
     require_admin()
-    st.header("📅 التقرير الشهري / Monthly Report")
+    st.header(t("m_report_monthly"))
 
     col1, col2 = st.columns(2)
     with col1:
-        date_from = st.date_input("من تاريخ", value=datetime.now().replace(day=1))
+        date_from = st.date_input(t("from_date"), value=datetime.now().replace(day=1))
     with col2:
-        date_to = st.date_input("إلى تاريخ", value=datetime.now())
+        date_to = st.date_input(t("to_date"), value=datetime.now())
 
-    if st.button("🔍 استخراج التقرير", use_container_width=True):
+    if st.button(t("generate_report"), use_container_width=True):
         with get_db() as conn:
             df_m = pd.read_sql_query(
                 "SELECT * FROM maintenance WHERE date >= ? AND date <= ? ORDER BY id ASC",
@@ -1149,7 +1509,7 @@ td{{padding:9px 8px;text-align:center;border:1px solid #e8ecf2;color:#333d4d;}}
         components.html(monthly_html, height=1100, scrolling=True)
         st.write("")
         st.download_button(
-            "📥 تحميل التقرير الشهري (HTML)",
+            t("download_monthly"),
             monthly_html,
             file_name=f"Monthly_{date_from}_{date_to}.html",
             mime="text/html",
@@ -1158,28 +1518,28 @@ td{{padding:9px 8px;text-align:center;border:1px solid #e8ecf2;color:#333d4d;}}
 
 # ===================== إدارة المستخدمين (مدير فقط) =====================
 
-elif choice == "👥 إدارة المستخدمين / User Management":
+elif choice == t("m_users"):
     require_admin()
-    st.header("👥 إدارة المستخدمين / User Management")
+    st.header(t("m_users"))
 
     with get_db() as conn:
         users_df = pd.read_sql_query("SELECT username, role FROM users", conn)
 
-    st.subheader("المستخدمون الحاليون")
+    st.subheader(t("current_users"))
     st.dataframe(users_df, use_container_width=True, hide_index=True)
 
     st.divider()
 
-    st.subheader("➕ إضافة مستخدم جديد")
+    st.subheader(t("add_user_h"))
     with st.form("add_user_form"):
-        new_user = st.text_input("اسم المستخدم / Username")
-        new_pass = st.text_input("كلمة المرور / Password", type="password")
-        new_role = st.selectbox("الصلاحية", [Role.TECH, Role.ADMIN])
-        if st.form_submit_button("إضافة", use_container_width=True):
+        new_user = st.text_input(t("username"))
+        new_pass = st.text_input(t("password"), type="password")
+        new_role = st.selectbox(t("role"), [Role.TECH, Role.ADMIN], format_func=tr_display)
+        if st.form_submit_button(t("add_btn"), use_container_width=True):
             if not new_user or not new_pass:
-                st.warning("يرجى تعبئة جميع الحقول")
+                st.warning(t("fill_all"))
             elif len(new_pass) < MIN_PASSWORD_LEN:
-                st.warning(f"⚠️ يجب أن تكون كلمة المرور {MIN_PASSWORD_LEN} أحرف على الأقل")
+                st.warning(t("pwd_too_short", MIN_PASSWORD_LEN))
             else:
                 try:
                     with get_db() as conn:
@@ -1187,47 +1547,47 @@ elif choice == "👥 إدارة المستخدمين / User Management":
                             "INSERT INTO users VALUES (?,?,?)",
                             (new_user, hash_password(new_pass), new_role)
                         )
-                    st.success(f"✅ تم إضافة المستخدم '{new_user}' بنجاح")
+                    st.success(t("user_added", new_user))
                     st.rerun()
                 except sqlite3.IntegrityError:
-                    st.error("⚠️ اسم المستخدم موجود مسبقاً")
+                    st.error(t("user_exists"))
 
     st.divider()
 
-    st.subheader("🗑️ حذف مستخدم")
+    st.subheader(t("delete_user_h"))
     deletable = [u for u in users_df['username'].tolist() if u != st.session_state.username]
     if deletable:
         with st.form("delete_user_form"):
-            del_user = st.selectbox("اختر المستخدم للحذف", deletable)
-            if st.form_submit_button("حذف", use_container_width=True):
+            del_user = st.selectbox(t("select_to_delete"), deletable)
+            if st.form_submit_button(t("delete_btn"), use_container_width=True):
                 with get_db() as conn:
                     conn.execute("DELETE FROM users WHERE username=?", (del_user,))
-                st.success(f"✅ تم حذف المستخدم '{del_user}'")
+                st.success(t("user_deleted", del_user))
                 st.rerun()
     else:
-        st.info("لا يوجد مستخدمون آخرون للحذف.")
+        st.info(t("no_other_users"))
 
     st.divider()
 
-    st.subheader("🔑 تغيير كلمة مرور مستخدم")
+    st.subheader(t("change_pwd_h"))
     with st.form("change_pass_form"):
-        chg_user = st.selectbox("اختر المستخدم", users_df['username'].tolist(), key="chg_user")
-        chg_pass = st.text_input("كلمة المرور الجديدة", type="password")
-        if st.form_submit_button("تحديث", use_container_width=True):
+        chg_user = st.selectbox(t("select_user"), users_df['username'].tolist(), key="chg_user")
+        chg_pass = st.text_input(t("new_pwd"), type="password")
+        if st.form_submit_button(t("update_btn"), use_container_width=True):
             if not chg_pass:
-                st.warning("أدخل كلمة المرور الجديدة")
+                st.warning(t("enter_new_pwd"))
             elif len(chg_pass) < MIN_PASSWORD_LEN:
-                st.warning(f"⚠️ يجب أن تكون كلمة المرور {MIN_PASSWORD_LEN} أحرف على الأقل")
+                st.warning(t("pwd_too_short", MIN_PASSWORD_LEN))
             else:
                 with get_db() as conn:
                     conn.execute(
                         "UPDATE users SET password=? WHERE username=?",
                         (hash_password(chg_pass), chg_user)
                     )
-                st.success(f"✅ تم تحديث كلمة مرور '{chg_user}'")
+                st.success(t("pwd_updated", chg_user))
 
 # ===================== زر تسجيل الخروج =====================
 
-if st.sidebar.button("🚪 تسجيل الخروج / Logout"):
+if st.sidebar.button(t("logout")):
     st.session_state.clear()
     st.rerun()
