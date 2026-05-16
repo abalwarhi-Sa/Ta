@@ -1412,6 +1412,13 @@ elif choice == t("m_report_monthly"):
                 params=(CheckStatus.OK, CheckStatus.NEEDS_FIX,
                         date_from.strftime("%Y-%m-%d"), date_to.strftime("%Y-%m-%d 23:59"))
             )
+            # جلب البنود التفصيلية مع الصور لكل جولة
+            df_d_items = pd.read_sql_query(
+                "SELECT batch_id, item, status, photo FROM daily_checks "
+                "WHERE date >= ? AND date <= ? ORDER BY batch_id, id",
+                conn,
+                params=(date_from.strftime("%Y-%m-%d"), date_to.strftime("%Y-%m-%d 23:59"))
+            )
 
         total       = len(df_m)
         done_count  = len(df_m[df_m['status'] == Status.DONE])
@@ -1438,16 +1445,34 @@ elif choice == t("m_report_monthly"):
             tech = row['tech_name'] if 'tech_name' in row.index else None
             clean_rows += f"<tr><td>CL-{row['id']:04d}</td><td>{safe(row['date'])}</td><td>{safe(row['area'])}</td><td>{safe(row['type'])}</td><td>{safe(tech)}</td><td>{cb}</td><td>{ca}</td></tr>"
 
+        # تجميع صور الجولات حسب batch_id
+        photos_by_batch = {}
+        for _, ph_row in df_d_items.iterrows():
+            bid = ph_row['batch_id']
+            if bid not in photos_by_batch:
+                photos_by_batch[bid] = []
+            if ph_row['photo']:
+                photos_by_batch[bid].append((ph_row['item'], ph_row['status'], ph_row['photo']))
+
         daily_rows = ""
+        thumb_style = "width:55px;height:42px;object-fit:cover;border-radius:4px;margin:1px;border:1px solid #dde3ec;"
         for _, row in df_d.iterrows():
-            daily_rows += f"<tr><td>DC-{safe(row['batch_id'])}</td><td>{safe(row['date'])}</td><td>{safe(row['tech_name'])}</td><td>{int(row['items_count'])}</td><td><span style='background:#27ae60;color:#fff;padding:2px 9px;border-radius:12px;font-size:11px;'>{int(row['ok_count'])}</span></td><td><span style='background:#e67e22;color:#fff;padding:2px 9px;border-radius:12px;font-size:11px;'>{int(row['fix_count'])}</span></td></tr>"
+            bid = row['batch_id']
+            # بناء معرض الصور المصغّرة لهذه الجولة
+            photos_html = ""
+            for item_name, item_status, photo_b64 in photos_by_batch.get(bid, []):
+                border_color = "#27ae60" if item_status == CheckStatus.OK else "#e67e22"
+                photos_html += f'<img src="data:image/jpeg;base64,{photo_b64}" style="{thumb_style}border-color:{border_color};" title="{safe(item_name)} - {safe(item_status)}">'
+            if not photos_html:
+                photos_html = "—"
+            daily_rows += f"<tr><td>DC-{safe(row['batch_id'])}</td><td>{safe(row['date'])}</td><td>{safe(row['tech_name'])}</td><td>{int(row['items_count'])}</td><td><span style='background:#27ae60;color:#fff;padding:2px 9px;border-radius:12px;font-size:11px;'>{int(row['ok_count'])}</span></td><td><span style='background:#e67e22;color:#fff;padding:2px 9px;border-radius:12px;font-size:11px;'>{int(row['fix_count'])}</span></td><td style='text-align:right;'>{photos_html}</td></tr>"
 
         logo_left_html  = render_img(l_logo_b64, "height:70px;object-fit:contain;", '<div style="width:70px;"></div>')
         logo_right_html = render_img(r_logo_b64, "height:70px;object-fit:contain;", '<div style="width:70px;"></div>')
 
         maint_table = (f"<table><thead><tr><th>الرقم</th><th>التاريخ</th><th>القسم</th><th>الموقع</th><th>الوصف</th><th>الحالة</th><th>الفني</th><th>قبل</th><th>بعد</th></tr></thead><tbody>{maint_rows}</tbody></table>" if total > 0 else '<div class="no-data">لا توجد بلاغات في هذه الفترة</div>')
         clean_table = (f"<table><thead><tr><th>الرقم</th><th>التاريخ</th><th>المنطقة</th><th>نوع التنظيف</th><th>المنفذ</th><th>قبل</th><th>بعد</th></tr></thead><tbody>{clean_rows}</tbody></table>" if clean_count > 0 else '<div class="no-data">لا توجد مهام نظافة في هذه الفترة</div>')
-        daily_table = (f"<table><thead><tr><th>الرقم</th><th>التاريخ</th><th>المنفذ</th><th>عدد البنود</th><th>سليم</th><th>يحتاج صيانة</th></tr></thead><tbody>{daily_rows}</tbody></table>" if daily_count > 0 else '<div class="no-data">لا توجد جولات تفقدية في هذه الفترة</div>')
+        daily_table = (f"<table><thead><tr><th>الرقم</th><th>التاريخ</th><th>المنفذ</th><th>عدد البنود</th><th>سليم</th><th>يحتاج صيانة</th><th>الصور / Photos</th></tr></thead><tbody>{daily_rows}</tbody></table>" if daily_count > 0 else '<div class="no-data">لا توجد جولات تفقدية في هذه الفترة</div>')
 
         monthly_html = f"""<!DOCTYPE html>
 <html dir="rtl" lang="ar"><head><meta charset="UTF-8">
