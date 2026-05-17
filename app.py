@@ -162,6 +162,13 @@ LANGS = {
         "disp_needs_fix": "يحتاج صيانة",
         "disp_admin": "مدير",
         "disp_tech": "فني",
+        # Backup
+        "backup_h": "💾 النسخ الاحتياطي",
+        "backup_info": "ℹ️ احفظ نسخة من قاعدة البيانات بشكل دوري (أسبوعياً على الأقل) واحتفظ بها في مكان آمن.",
+        "backup_btn": "📥 تحميل نسخة احتياطية الآن",
+        "backup_size": "📊 حجم قاعدة البيانات الحالية:",
+        "backup_records": "📈 إجمالي السجلات:",
+        "backup_last_modified": "🕐 آخر تعديل:",
     },
     "en": {
         "login_title": "🔐 System Login",
@@ -289,6 +296,12 @@ LANGS = {
         "disp_needs_fix": "Needs Repair",
         "disp_admin": "Admin",
         "disp_tech": "Technician",
+        "backup_h": "💾 Backup",
+        "backup_info": "ℹ️ Download a database backup periodically (at least weekly) and keep it in a safe location.",
+        "backup_btn": "📥 Download Backup Now",
+        "backup_size": "📊 Current database size:",
+        "backup_records": "📈 Total records:",
+        "backup_last_modified": "🕐 Last modified:",
     },
 }
 
@@ -336,7 +349,12 @@ DISPLAY_MAP_EN = {
     "—": "—",
     # الصلاحيات / Roles
     "مدير": "Admin",
-    "فني": "Technician",
+    "مشرف": "Supervisor",
+    "فني صيانة": "Maintenance Tech",
+    "فني نظافة": "Cleaning Tech",
+    "فني تفقّد": "Inspection Tech",
+    "قارئ": "Reader",
+    "فني": "Technician (Legacy)",
     # أقسام الصيانة / Maintenance departments
     "تكييف": "AC",
     "كهرباء": "Electrical",
@@ -379,7 +397,56 @@ class Status:
 
 class Role:
     ADMIN = "مدير"
-    TECH = "فني"
+    SUPERVISOR = "مشرف"
+    TECH_MAINT = "فني صيانة"
+    TECH_CLEAN = "فني نظافة"
+    TECH_INSPECT = "فني تفقّد"
+    READER = "قارئ"
+    TECH = "فني"  # قديم - للتوافق مع الحسابات الموجودة
+
+# قائمة الأدوار القابلة للاختيار في النموذج الجديد (دون "فني" القديم)
+SELECTABLE_ROLES = [
+    "مدير",
+    "مشرف",
+    "فني صيانة",
+    "فني نظافة",
+    "فني تفقّد",
+    "قارئ",
+]
+
+# مصفوفة الصلاحيات لكل دور
+# "ALL" تعني كل الصلاحيات
+PERMISSIONS = {
+    "مدير": "ALL",
+    "مشرف": {
+        "view_dashboard",
+        "maint_open", "maint_close",
+        "cleaning_view",
+        "daily_view",
+        "report_maint", "report_clean", "report_daily", "report_monthly",
+    },
+    "فني صيانة": {
+        "maint_open", "maint_close",
+    },
+    "فني نظافة": {
+        "cleaning_add", "cleaning_view",
+    },
+    "فني تفقّد": {
+        "daily_new", "daily_view",
+    },
+    "قارئ": {
+        "view_dashboard",
+        "cleaning_view",
+        "daily_view",
+        "report_maint", "report_clean", "report_daily", "report_monthly",
+    },
+    # توافق مع الحسابات القديمة بدور "فني"
+    "فني": {
+        "maint_open", "maint_close",
+        "cleaning_add", "cleaning_view",
+        "daily_new", "daily_view",
+    },
+}
 
 
 class CheckStatus:
@@ -479,6 +546,22 @@ def render_img(b64: str, style: str, placeholder_html: str = None) -> str:
 def require_admin():
     """يوقف تنفيذ الصفحة إذا لم يكن المستخدم مديراً (تحقق خلفي حقيقي)."""
     if st.session_state.get('user_role') != Role.ADMIN:
+        st.error(t("admin_only"))
+        st.stop()
+
+
+def has_permission(perm: str) -> bool:
+    """تحقق هل المستخدم الحالي يملك صلاحية معينة."""
+    role = st.session_state.get('user_role', '')
+    perms = PERMISSIONS.get(role, set())
+    if perms == "ALL":
+        return True
+    return perm in perms
+
+
+def require_permission(perm: str):
+    """يوقف الصفحة إذا لم يملك المستخدم الصلاحية."""
+    if not has_permission(perm):
         st.error(t("admin_only"))
         st.stop()
 
@@ -635,24 +718,37 @@ report_footer = st.sidebar.text_input(t("footer_text_label"), value=t("default_f
 
 is_admin = st.session_state.user_role == Role.ADMIN
 
-# القائمة حسب الصلاحية
+# القائمة الديناميكية حسب الصلاحيات الفعلية
+menu = []
+if has_permission("view_dashboard"):
+    menu.append(t("m_dashboard"))
+if has_permission("maint_open") or has_permission("maint_close"):
+    menu.append(t("m_maintenance"))
+if has_permission("cleaning_add") or has_permission("cleaning_view"):
+    menu.append(t("m_cleaning"))
+if has_permission("daily_new") or has_permission("daily_view"):
+    menu.append(t("m_daily"))
+if has_permission("report_maint"):
+    menu.append(t("m_report_maint"))
+if has_permission("report_clean"):
+    menu.append(t("m_report_clean"))
+if has_permission("report_daily"):
+    menu.append(t("m_report_daily"))
+if has_permission("report_monthly"):
+    menu.append(t("m_report_monthly"))
 if is_admin:
-    menu = [
-        t("m_dashboard"), t("m_maintenance"), t("m_cleaning"),
-        t("m_daily"),
-        t("m_report_maint"), t("m_report_clean"),
-        t("m_report_daily"),
-        t("m_report_monthly"), t("m_users")
-    ]
-else:
-    menu = [t("m_maintenance"), t("m_cleaning"), t("m_daily")]
+    menu.append(t("m_users"))
+
+# في حالة المستخدم بلا صلاحيات
+if not menu:
+    menu = ["(لا توجد صلاحيات)"]
 
 choice = st.selectbox(t("go_to"), menu)
 
 # ===================== لوحة المؤشرات (مدير فقط) =====================
 
 if choice == t("m_dashboard"):
-    require_admin()
+    require_permission("view_dashboard")
     st.header(t("dashboard_h"))
     with get_db() as conn:
         m_count = conn.execute("SELECT COUNT(*) FROM maintenance").fetchone()[0]
@@ -683,57 +779,63 @@ elif choice == t("m_maintenance"):
     t1, t2 = st.tabs([t("tab_new_report"), t("tab_close_report")])
 
     with t1:
-        with st.form("add_maintenance"):
-            dept  = st.selectbox(t("dept"), ["تكييف", "كهرباء", "سباكة", "نجارة", "أخرى"], format_func=tr_display)
-            loc   = st.text_input(t("location_label"))
-            desc  = st.text_area(t("problem_desc"))
-            img_b = st.file_uploader(t("photo_before_label"), type=['jpg', 'png', 'jpeg'])
-            if st.form_submit_button(t("submit_report"), use_container_width=True):
-                if loc and desc:
-                    with get_db() as conn:
-                        conn.execute(
-                            "INSERT INTO maintenance (date,dept,office_name,description,status,img_before) "
-                            "VALUES (?,?,?,?,?,?)",
-                            (
-                                datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                dept, loc, desc, Status.PENDING, file_to_base64(img_b)
+        if not has_permission("maint_open"):
+            st.info(t("admin_only"))
+        else:
+            with st.form("add_maintenance"):
+                dept  = st.selectbox(t("dept"), ["تكييف", "كهرباء", "سباكة", "نجارة", "أخرى"], format_func=tr_display)
+                loc   = st.text_input(t("location_label"))
+                desc  = st.text_area(t("problem_desc"))
+                img_b = st.file_uploader(t("photo_before_label"), type=['jpg', 'png', 'jpeg'])
+                if st.form_submit_button(t("submit_report"), use_container_width=True):
+                    if loc and desc:
+                        with get_db() as conn:
+                            conn.execute(
+                                "INSERT INTO maintenance (date,dept,office_name,description,status,img_before) "
+                                "VALUES (?,?,?,?,?,?)",
+                                (
+                                    datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                    dept, loc, desc, Status.PENDING, file_to_base64(img_b)
+                                )
                             )
-                        )
-                    st.success(t("report_sent"))
-                else:
-                    st.warning(t("fill_required"))
+                        st.success(t("report_sent"))
+                    else:
+                        st.warning(t("fill_required"))
 
     with t2:
-        with get_db() as conn:
-            pending_tasks = pd.read_sql_query(
-                "SELECT id, office_name, description FROM maintenance WHERE status=?",
-                conn, params=(Status.PENDING,)
-            )
-        if not pending_tasks.empty:
-            options = {
-                f"#{row['id']} - {row['office_name']}": row['id']
-                for _, row in pending_tasks.iterrows()
-            }
-            selected = st.selectbox(t("select_report"), list(options.keys()))
-            task_id  = options[selected]
-            with st.form("close_task"):
-                action = st.text_area(t("action_taken"))
-                img_a  = st.file_uploader(t("photo_after_label"), type=['jpg', 'png', 'jpeg'])
-                if st.form_submit_button(t("close_report"), use_container_width=True):
-                    with get_db() as conn:
-                        conn.execute(
-                            "UPDATE maintenance "
-                            "SET status=?, action_taken=?, img_after=?, tech_name=? "
-                            "WHERE id=?",
-                            (
-                                Status.DONE, action, file_to_base64(img_a),
-                                st.session_state.username, task_id
-                            )
-                        )
-                    st.success(t("report_closed"))
-                    st.rerun()
+        if not has_permission("maint_close"):
+            st.info(t("admin_only"))
         else:
-            st.info(t("no_pending"))
+            with get_db() as conn:
+                pending_tasks = pd.read_sql_query(
+                    "SELECT id, office_name, description FROM maintenance WHERE status=?",
+                    conn, params=(Status.PENDING,)
+                )
+            if not pending_tasks.empty:
+                options = {
+                    f"#{row['id']} - {row['office_name']}": row['id']
+                    for _, row in pending_tasks.iterrows()
+                }
+                selected = st.selectbox(t("select_report"), list(options.keys()))
+                task_id  = options[selected]
+                with st.form("close_task"):
+                    action = st.text_area(t("action_taken"))
+                    img_a  = st.file_uploader(t("photo_after_label"), type=['jpg', 'png', 'jpeg'])
+                    if st.form_submit_button(t("close_report"), use_container_width=True):
+                        with get_db() as conn:
+                            conn.execute(
+                                "UPDATE maintenance "
+                                "SET status=?, action_taken=?, img_after=?, tech_name=? "
+                                "WHERE id=?",
+                                (
+                                    Status.DONE, action, file_to_base64(img_a),
+                                    st.session_state.username, task_id
+                                )
+                            )
+                        st.success(t("report_closed"))
+                        st.rerun()
+            else:
+                st.info(t("no_pending"))
 
 # ===================== قسم النظافة =====================
 
@@ -742,73 +844,79 @@ elif choice == t("m_cleaning"):
     t1, t2 = st.tabs([t("tab_add_record"), t("tab_view_records")])
 
     with t1:
-        with st.form("cleaning_form"):
-            area    = st.text_input(t("clean_area"))
-            c_type  = st.selectbox(
-                t("clean_type"),
-                ["يومي روتيني", "تنظيف عميق", "تلميع رخام", "واجهات"],
-                format_func=tr_display,
-            )
-            c_img_b = st.file_uploader(t("before_clean"), type=['jpg', 'png', 'jpeg'])
-            c_img_a = st.file_uploader(t("after_clean"),  type=['jpg', 'png', 'jpeg'])
-            if st.form_submit_button(t("save_record"), use_container_width=True):
-                if area:
-                    with get_db() as conn:
-                        conn.execute(
-                            "INSERT INTO cleaning (date,area,type,img_before,img_after,tech_name) "
-                            "VALUES (?,?,?,?,?,?)",
-                            (
-                                datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                area, c_type,
-                                file_to_base64(c_img_b), file_to_base64(c_img_a),
-                                st.session_state.username
+        if not has_permission("cleaning_add"):
+            st.info(t("admin_only"))
+        else:
+            with st.form("cleaning_form"):
+                area    = st.text_input(t("clean_area"))
+                c_type  = st.selectbox(
+                    t("clean_type"),
+                    ["يومي روتيني", "تنظيف عميق", "تلميع رخام", "واجهات"],
+                    format_func=tr_display,
+                )
+                c_img_b = st.file_uploader(t("before_clean"), type=['jpg', 'png', 'jpeg'])
+                c_img_a = st.file_uploader(t("after_clean"),  type=['jpg', 'png', 'jpeg'])
+                if st.form_submit_button(t("save_record"), use_container_width=True):
+                    if area:
+                        with get_db() as conn:
+                            conn.execute(
+                                "INSERT INTO cleaning (date,area,type,img_before,img_after,tech_name) "
+                                "VALUES (?,?,?,?,?,?)",
+                                (
+                                    datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                    area, c_type,
+                                    file_to_base64(c_img_b), file_to_base64(c_img_a),
+                                    st.session_state.username
+                                )
                             )
-                        )
-                    st.success(t("saved"))
-                else:
-                    st.warning(t("enter_area"))
+                        st.success(t("saved"))
+                    else:
+                        st.warning(t("enter_area"))
 
     with t2:
-        with get_db() as conn:
-            df_cl = pd.read_sql_query(
-                "SELECT id, date, area, type, tech_name, img_before, img_after "
-                "FROM cleaning ORDER BY id DESC", conn
-            )
-        if df_cl.empty:
-            st.info(t("no_records"))
+        if not has_permission("cleaning_view"):
+            st.info(t("admin_only"))
         else:
-            display_df = df_cl[['id', 'date', 'area', 'type', 'tech_name']].copy()
-            cols_ar = ['الرقم', 'التاريخ', 'المنطقة', 'النوع', 'المنفذ']
-            cols_en = ['ID', 'Date', 'Area', 'Type', 'Executor']
-            display_df.columns = cols_en if st.session_state.get('lang','ar')=='en' else cols_ar
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            with get_db() as conn:
+                df_cl = pd.read_sql_query(
+                    "SELECT id, date, area, type, tech_name, img_before, img_after "
+                    "FROM cleaning ORDER BY id DESC", conn
+                )
+            if df_cl.empty:
+                st.info(t("no_records"))
+            else:
+                display_df = df_cl[['id', 'date', 'area', 'type', 'tech_name']].copy()
+                cols_ar = ['الرقم', 'التاريخ', 'المنطقة', 'النوع', 'المنفذ']
+                cols_en = ['ID', 'Date', 'Area', 'Type', 'Executor']
+                display_df.columns = cols_en if st.session_state.get('lang','ar')=='en' else cols_ar
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-            st.divider()
-            st.subheader(t("view_photos"))
-            options = {
-                f"#{row['id']} - {row['date']} - {row['area']}": row['id']
-                for _, row in df_cl.iterrows()
-            }
-            picked = st.selectbox(t("select_record_view"), list(options.keys()))
-            rec_id = options[picked]
-            r = df_cl[df_cl['id'] == rec_id].iloc[0]
+                st.divider()
+                st.subheader(t("view_photos"))
+                options = {
+                    f"#{row['id']} - {row['date']} - {row['area']}": row['id']
+                    for _, row in df_cl.iterrows()
+                }
+                picked = st.selectbox(t("select_record_view"), list(options.keys()))
+                rec_id = options[picked]
+                r = df_cl[df_cl['id'] == rec_id].iloc[0]
 
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown(t("before_lbl"))
-                if r['img_before']:
-                    st.image(base64.b64decode(r['img_before']), use_container_width=True)
-                else:
-                    st.info(t("no_photo"))
-            with c2:
-                st.markdown(t("after_lbl"))
-                if r['img_after']:
-                    st.image(base64.b64decode(r['img_after']), use_container_width=True)
-                else:
-                    st.info(t("no_photo"))
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown(t("before_lbl"))
+                    if r['img_before']:
+                        st.image(base64.b64decode(r['img_before']), use_container_width=True)
+                    else:
+                        st.info(t("no_photo"))
+                with c2:
+                    st.markdown(t("after_lbl"))
+                    if r['img_after']:
+                        st.image(base64.b64decode(r['img_after']), use_container_width=True)
+                    else:
+                        st.info(t("no_photo"))
 
-            if is_admin:
-                st.caption("ℹ️ لإصدار تقرير رسمي مع التوقيع، انتقل إلى \"🧽 تقرير نظافة فردي\".")
+                if is_admin:
+                    st.caption("ℹ️ لإصدار تقرير رسمي مع التوقيع، انتقل إلى \"🧽 تقرير نظافة فردي\".")
 
 # ===================== المهام اليومية (الجولات التفقدية) =====================
 
@@ -817,130 +925,136 @@ elif choice == t("m_daily"):
     t1, t2 = st.tabs([t("tab_new_round"), t("tab_daily_log")])
 
     with t1:
-        st.info(t("inspection_info"))
+        if not has_permission("daily_new"):
+            st.info(t("admin_only"))
+        else:
+            st.info(t("inspection_info"))
 
-        with st.form("daily_inspection_form", clear_on_submit=False):
-            general_notes = st.text_area(t("general_notes"), key="dc_general_notes")
-            st.divider()
-
-            inspection_data = {}
-            for idx, item in enumerate(CHECKLIST_ITEMS):
-                st.markdown(f"#### {tr_display(item)}")
-                col_a, col_b = st.columns([1, 1])
-                with col_a:
-                    status = st.selectbox(
-                        t("status_label"),
-                        [CheckStatus.NOT_CHECKED, CheckStatus.OK, CheckStatus.NEEDS_FIX],
-                        format_func=tr_display,
-                        key=f"dc_status_{idx}",
-                    )
-                    notes = st.text_input(t("notes_label"), key=f"dc_notes_{idx}")
-                with col_b:
-                    photo = st.file_uploader(
-                        t("check_photo"),
-                        type=['jpg', 'png', 'jpeg'],
-                        key=f"dc_photo_{idx}"
-                    )
-                inspection_data[item] = {
-                    'status': status,
-                    'photo': photo,
-                    'notes': notes
-                }
+            with st.form("daily_inspection_form", clear_on_submit=False):
+                general_notes = st.text_area(t("general_notes"), key="dc_general_notes")
                 st.divider()
 
-            submitted = st.form_submit_button(
-                t("save_inspection"),
-                use_container_width=True
-            )
-
-            if submitted:
-                checked = {k: v for k, v in inspection_data.items()
-                           if v['status'] != CheckStatus.NOT_CHECKED}
-
-                if not checked:
-                    st.warning(t("no_item_checked"))
-                else:
-                    missing_photos = [k for k, v in checked.items() if v['photo'] is None]
-                    if missing_photos:
-                        st.error(
-                            "⚠️ يجب التقاط صورة لكل بند تم تشييكه. "
-                            f"الصور الناقصة: {'، '.join(missing_photos)}"
+                inspection_data = {}
+                for idx, item in enumerate(CHECKLIST_ITEMS):
+                    st.markdown(f"#### {tr_display(item)}")
+                    col_a, col_b = st.columns([1, 1])
+                    with col_a:
+                        status = st.selectbox(
+                            t("status_label"),
+                            [CheckStatus.NOT_CHECKED, CheckStatus.OK, CheckStatus.NEEDS_FIX],
+                            format_func=tr_display,
+                            key=f"dc_status_{idx}",
                         )
-                    else:
-                        batch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        with get_db() as conn:
-                            for item, d in checked.items():
-                                conn.execute(
-                                    "INSERT INTO daily_checks "
-                                    "(date, batch_id, tech_name, item, status, photo, notes) "
-                                    "VALUES (?,?,?,?,?,?,?)",
-                                    (
-                                        ts, batch_id,
-                                        st.session_state.username,
-                                        item, d['status'],
-                                        file_to_base64(d['photo']),
-                                        d['notes'] or general_notes
-                                    )
-                                )
-                        st.success(
-                            f"✅ تم حفظ الجولة التفقدية ({len(checked)} بند). "
-                            f"رقم الجولة: DC-{batch_id}"
+                        notes = st.text_input(t("notes_label"), key=f"dc_notes_{idx}")
+                    with col_b:
+                        photo = st.file_uploader(
+                            t("check_photo"),
+                            type=['jpg', 'png', 'jpeg'],
+                            key=f"dc_photo_{idx}"
                         )
+                    inspection_data[item] = {
+                        'status': status,
+                        'photo': photo,
+                        'notes': notes
+                    }
+                    st.divider()
 
-    with t2:
-        with get_db() as conn:
-            batches = pd.read_sql_query(
-                "SELECT batch_id, MIN(date) as date, tech_name, COUNT(*) as items_count "
-                "FROM daily_checks GROUP BY batch_id ORDER BY batch_id DESC",
-                conn
-            )
-
-        if batches.empty:
-            st.info(t("no_inspections"))
-        else:
-            display_b = batches.copy()
-            display_b['batch_id'] = "DC-" + display_b['batch_id'].astype(str)
-            cols_ar = ['رقم الجولة', 'التاريخ', 'المنفذ', 'عدد البنود']
-            cols_en = ['Round ID', 'Date', 'Executor', 'Items Count']
-            display_b.columns = cols_en if st.session_state.get('lang','ar')=='en' else cols_ar
-            st.dataframe(display_b, use_container_width=True, hide_index=True)
-
-            st.divider()
-            st.subheader(t("view_details"))
-            batch_options = {
-                f"DC-{row['batch_id']} | {row['date']} | {row['tech_name']}": row['batch_id']
-                for _, row in batches.iterrows()
-            }
-            picked = st.selectbox(t("select_round"), list(batch_options.keys()))
-            batch_id = batch_options[picked]
-
-            with get_db() as conn:
-                items_df = pd.read_sql_query(
-                    "SELECT * FROM daily_checks WHERE batch_id=? ORDER BY id",
-                    conn, params=(batch_id,)
+                submitted = st.form_submit_button(
+                    t("save_inspection"),
+                    use_container_width=True
                 )
 
-            for _, row in items_df.iterrows():
-                with st.container():
-                    cols = st.columns([2, 3])
-                    with cols[0]:
-                        icon = "🟢" if row['status'] == CheckStatus.OK else "🟠"
-                        st.markdown(f"### {tr_display(row['item'])}")
-                        st.markdown(f"**" + t("status_label") + ":** {} {}".format(icon, tr_display(row['status'])))
-                        if row['notes']:
-                            st.markdown(f"**{t('notes_label')}:** {row['notes']}")
-                    with cols[1]:
-                        if row['photo']:
-                            st.image(base64.b64decode(row['photo']), width=320)
+                if submitted:
+                    checked = {k: v for k, v in inspection_data.items()
+                               if v['status'] != CheckStatus.NOT_CHECKED}
+
+                    if not checked:
+                        st.warning(t("no_item_checked"))
+                    else:
+                        missing_photos = [k for k, v in checked.items() if v['photo'] is None]
+                        if missing_photos:
+                            st.error(
+                                "⚠️ يجب التقاط صورة لكل بند تم تشييكه. "
+                                f"الصور الناقصة: {'، '.join(missing_photos)}"
+                            )
                         else:
-                            st.info(t("no_photo"))
-                    st.divider()
+                            batch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+                            with get_db() as conn:
+                                for item, d in checked.items():
+                                    conn.execute(
+                                        "INSERT INTO daily_checks "
+                                        "(date, batch_id, tech_name, item, status, photo, notes) "
+                                        "VALUES (?,?,?,?,?,?,?)",
+                                        (
+                                            ts, batch_id,
+                                            st.session_state.username,
+                                            item, d['status'],
+                                            file_to_base64(d['photo']),
+                                            d['notes'] or general_notes
+                                        )
+                                    )
+                            st.success(
+                                f"✅ تم حفظ الجولة التفقدية ({len(checked)} بند). "
+                                f"رقم الجولة: DC-{batch_id}"
+                            )
+
+    with t2:
+        if not has_permission("daily_view"):
+            st.info(t("admin_only"))
+        else:
+            with get_db() as conn:
+                batches = pd.read_sql_query(
+                    "SELECT batch_id, MIN(date) as date, tech_name, COUNT(*) as items_count "
+                    "FROM daily_checks GROUP BY batch_id ORDER BY batch_id DESC",
+                    conn
+                )
+
+            if batches.empty:
+                st.info(t("no_inspections"))
+            else:
+                display_b = batches.copy()
+                display_b['batch_id'] = "DC-" + display_b['batch_id'].astype(str)
+                cols_ar = ['رقم الجولة', 'التاريخ', 'المنفذ', 'عدد البنود']
+                cols_en = ['Round ID', 'Date', 'Executor', 'Items Count']
+                display_b.columns = cols_en if st.session_state.get('lang','ar')=='en' else cols_ar
+                st.dataframe(display_b, use_container_width=True, hide_index=True)
+
+                st.divider()
+                st.subheader(t("view_details"))
+                batch_options = {
+                    f"DC-{row['batch_id']} | {row['date']} | {row['tech_name']}": row['batch_id']
+                    for _, row in batches.iterrows()
+                }
+                picked = st.selectbox(t("select_round"), list(batch_options.keys()))
+                batch_id = batch_options[picked]
+
+                with get_db() as conn:
+                    items_df = pd.read_sql_query(
+                        "SELECT * FROM daily_checks WHERE batch_id=? ORDER BY id",
+                        conn, params=(batch_id,)
+                    )
+
+                for _, row in items_df.iterrows():
+                    with st.container():
+                        cols = st.columns([2, 3])
+                        with cols[0]:
+                            icon = "🟢" if row['status'] == CheckStatus.OK else "🟠"
+                            st.markdown(f"### {tr_display(row['item'])}")
+                            st.markdown(f"**" + t("status_label") + ":** {} {}".format(icon, tr_display(row['status'])))
+                            if row['notes']:
+                                st.markdown(f"**{t('notes_label')}:** {row['notes']}")
+                        with cols[1]:
+                            if row['photo']:
+                                st.image(base64.b64decode(row['photo']), width=320)
+                            else:
+                                st.info(t("no_photo"))
+                        st.divider()
 
 # ===================== تقرير بلاغ فردي (مدير فقط) =====================
 
 elif choice == t("m_report_maint"):
-    require_admin()
+    require_permission("report_maint")
     st.header(t("m_report_maint"))
     with get_db() as conn:
         df = pd.read_sql_query("SELECT * FROM maintenance ORDER BY id DESC", conn)
@@ -1079,7 +1193,7 @@ elif choice == t("m_report_maint"):
 # ===================== تقرير نظافة فردي (مدير فقط) =====================
 
 elif choice == t("m_report_clean"):
-    require_admin()
+    require_permission("report_clean")
     st.header(t("m_report_clean"))
     with get_db() as conn:
         df = pd.read_sql_query("SELECT * FROM cleaning ORDER BY id DESC", conn)
@@ -1215,7 +1329,7 @@ elif choice == t("m_report_clean"):
 # ===================== تقرير الجولة اليومية (مدير فقط) =====================
 
 elif choice == t("m_report_daily"):
-    require_admin()
+    require_permission("report_daily")
     st.header(t("m_report_daily"))
 
     with get_db() as conn:
@@ -1381,7 +1495,7 @@ elif choice == t("m_report_daily"):
 # ===================== التقرير الشهري (مدير فقط) =====================
 
 elif choice == t("m_report_monthly"):
-    require_admin()
+    require_permission("report_monthly")
     st.header(t("m_report_monthly"))
 
     col1, col2 = st.columns(2)
@@ -1559,7 +1673,7 @@ elif choice == t("m_users"):
     with st.form("add_user_form"):
         new_user = st.text_input(t("username"))
         new_pass = st.text_input(t("password"), type="password")
-        new_role = st.selectbox(t("role"), [Role.TECH, Role.ADMIN], format_func=tr_display)
+        new_role = st.selectbox(t("role"), SELECTABLE_ROLES, format_func=tr_display)
         if st.form_submit_button(t("add_btn"), use_container_width=True):
             if not new_user or not new_pass:
                 st.warning(t("fill_all"))
@@ -1610,6 +1724,45 @@ elif choice == t("m_users"):
                         (hash_password(chg_pass), chg_user)
                     )
                 st.success(t("pwd_updated", chg_user))
+
+    st.divider()
+
+    # ============ النسخة الاحتياطية ============
+    st.subheader(t("backup_h"))
+    st.info(t("backup_info"))
+
+    try:
+        import os as _os
+        db_size = _os.path.getsize(DB_NAME)
+        db_mtime = datetime.fromtimestamp(_os.path.getmtime(DB_NAME))
+        with get_db() as _conn:
+            total_records = (
+                _conn.execute("SELECT COUNT(*) FROM maintenance").fetchone()[0] +
+                _conn.execute("SELECT COUNT(*) FROM cleaning").fetchone()[0] +
+                _conn.execute("SELECT COUNT(*) FROM daily_checks").fetchone()[0]
+            )
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric(t("backup_size"), f"{db_size/1024:.1f} KB")
+        with c2:
+            st.metric(t("backup_records"), total_records)
+        with c3:
+            st.metric(t("backup_last_modified"), db_mtime.strftime("%Y-%m-%d %H:%M"))
+
+        with open(DB_NAME, "rb") as _f:
+            db_bytes = _f.read()
+
+        st.download_button(
+            label=t("backup_btn"),
+            data=db_bytes,
+            file_name=f"taqyeem_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
+            mime="application/x-sqlite3",
+            use_container_width=True,
+            type="primary"
+        )
+    except Exception as _e:
+        st.error(f"⚠️ {_e}")
 
 # ===================== زر تسجيل الخروج =====================
 
