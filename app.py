@@ -153,8 +153,8 @@ LANGS = {
         "download_cleaning": "📥 تحميل تقرير النظافة (HTML)",
         "to_official_caption": "ℹ️ لإصدار تقرير رسمي مع التوقيع، انتقل إلى تقرير نظافة فردي.",
         # Defaults
-        "default_org": "وزارة الشؤون البلدية",
-        "default_footer": "سري - للاستخدام الرسمي فقط",
+        "default_org": " ",
+        "default_footer": " ",
         # Status display (for translating stored Arabic values)
         "disp_pending": "قيد الانتظار",
         "disp_done": "تم الإصلاح",
@@ -288,8 +288,8 @@ LANGS = {
         "download_monthly": "📥 Download Monthly Report (HTML)",
         "download_cleaning": "📥 Download Cleaning Report (HTML)",
         "to_official_caption": "ℹ️ For an official report with signatures, go to Single Cleaning Report.",
-        "default_org": "Municipal Affairs Ministry",
-        "default_footer": "Confidential - Official Use Only",
+        "default_org": " ",
+        "default_footer": " ",
         "disp_pending": "Pending",
         "disp_done": "Completed",
         "disp_ok": "OK",
