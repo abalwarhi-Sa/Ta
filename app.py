@@ -153,8 +153,8 @@ LANGS = {
         "download_cleaning": "📥 تحميل تقرير النظافة (HTML)",
         "to_official_caption": "ℹ️ لإصدار تقرير رسمي مع التوقيع، انتقل إلى تقرير نظافة فردي.",
         # Defaults
-        "default_org": " ",
-        "default_footer": " ",
+        "default_org": "وزارة الشؤون البلدية",
+        "default_footer": "سري - للاستخدام الرسمي فقط",
         # Status display (for translating stored Arabic values)
         "disp_pending": "قيد الانتظار",
         "disp_done": "تم الإصلاح",
@@ -162,6 +162,12 @@ LANGS = {
         "disp_needs_fix": "يحتاج صيانة",
         "disp_admin": "مدير",
         "disp_tech": "فني",
+        # Edit Role
+        "edit_role_h": "🛡️ تعديل دور (صلاحيات) المستخدم",
+        "current_role": "الدور الحالي:",
+        "new_role_label": "الدور الجديد:",
+        "role_updated": "✅ تم تحديث دور '{}' إلى '{}'",
+        "cant_change_self": "⚠️ لا يمكنك تغيير دورك بنفسك (تجنّب فقدان صلاحيات المدير)",
         # Backup
         "backup_h": "💾 النسخ الاحتياطي",
         "backup_info": "ℹ️ احفظ نسخة من قاعدة البيانات بشكل دوري (أسبوعياً على الأقل) واحتفظ بها في مكان آمن.",
@@ -288,14 +294,19 @@ LANGS = {
         "download_monthly": "📥 Download Monthly Report (HTML)",
         "download_cleaning": "📥 Download Cleaning Report (HTML)",
         "to_official_caption": "ℹ️ For an official report with signatures, go to Single Cleaning Report.",
-        "default_org": " ",
-        "default_footer": " ",
+        "default_org": "Municipal Affairs Ministry",
+        "default_footer": "Confidential - Official Use Only",
         "disp_pending": "Pending",
         "disp_done": "Completed",
         "disp_ok": "OK",
         "disp_needs_fix": "Needs Repair",
         "disp_admin": "Admin",
         "disp_tech": "Technician",
+        "edit_role_h": "🛡️ Edit User Role / Permissions",
+        "current_role": "Current role:",
+        "new_role_label": "New role:",
+        "role_updated": "✅ Role of '{}' updated to '{}'",
+        "cant_change_self": "⚠️ You cannot change your own role (to prevent losing admin access)",
         "backup_h": "💾 Backup",
         "backup_info": "ℹ️ Download a database backup periodically (at least weekly) and keep it in a safe location.",
         "backup_btn": "📥 Download Backup Now",
@@ -420,8 +431,8 @@ PERMISSIONS = {
     "مشرف": {
         "view_dashboard",
         "maint_open", "maint_close",
-        "cleaning_view",
-        "daily_view",
+        "cleaning_add", "cleaning_view",
+        "daily_new", "daily_view",
         "report_maint", "report_clean", "report_daily", "report_monthly",
     },
     "فني صيانة": {
@@ -1726,6 +1737,34 @@ elif choice == t("m_users"):
                         (hash_password(chg_pass), chg_user)
                     )
                 st.success(t("pwd_updated", chg_user))
+
+    st.divider()
+
+    # ============ تعديل دور المستخدم ============
+    st.subheader(t("edit_role_h"))
+    _editable_users = [u for u in users_df['username'].tolist() if u != st.session_state.username]
+    if not _editable_users:
+        st.info(t("cant_change_self"))
+    else:
+        with st.form("edit_role_form"):
+            er_user = st.selectbox(t("select_user"), _editable_users, key="er_user")
+            # عرض الدور الحالي
+            _current = users_df[users_df['username'] == er_user]['role'].iloc[0]
+            st.caption(f"{t('current_role')} **{tr_display(_current)}**")
+            er_role = st.selectbox(
+                t("new_role_label"),
+                SELECTABLE_ROLES,
+                format_func=tr_display,
+                key="er_role"
+            )
+            if st.form_submit_button(t("update_btn"), use_container_width=True):
+                with get_db() as conn:
+                    conn.execute(
+                        "UPDATE users SET role=? WHERE username=?",
+                        (er_role, er_user)
+                    )
+                st.success(t("role_updated", er_user, tr_display(er_role)))
+                st.rerun()
 
     st.divider()
 
