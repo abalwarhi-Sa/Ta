@@ -153,8 +153,8 @@ LANGS = {
         "download_cleaning": "📥 تحميل تقرير النظافة (HTML)",
         "to_official_caption": "ℹ️ لإصدار تقرير رسمي مع التوقيع، انتقل إلى تقرير نظافة فردي.",
         # Defaults
-        "default_org": "",
-        "default_footer": "",
+        "default_org": "وزارة الشؤون البلدية",
+        "default_footer": "سري - للاستخدام الرسمي فقط",
         # Status display (for translating stored Arabic values)
         "disp_pending": "قيد الانتظار",
         "disp_done": "تم الإصلاح",
@@ -410,7 +410,6 @@ SELECTABLE_ROLES = [
     "مشرف",
     "فني صيانة",
     "فني نظافة",
-    "فني تفقّد",
     "قارئ",
 ]
 
@@ -427,11 +426,14 @@ PERMISSIONS = {
     },
     "فني صيانة": {
         "maint_open", "maint_close",
+        "daily_new", "daily_view",
     },
     "فني نظافة": {
         "cleaning_add", "cleaning_view",
     },
+    # دور قديم - يحصل على نفس صلاحيات فني الصيانة للتوافق
     "فني تفقّد": {
+        "maint_open", "maint_close",
         "daily_new", "daily_view",
     },
     "قارئ": {
