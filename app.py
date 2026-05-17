@@ -4,6 +4,7 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 from contextlib import contextmanager
+from zoneinfo import ZoneInfo
 import base64
 import hashlib
 import secrets
@@ -22,6 +23,27 @@ if _db_dir and not os.path.exists(_db_dir):
 MAX_IMG_SIZE_MB = 5
 MAX_LOGIN_ATTEMPTS = 5
 MIN_PASSWORD_LEN = 6
+
+# المناطق الزمنية الشائعة في الشرق الأوسط وشمال أفريقيا
+TIMEZONES = {
+    "Asia/Riyadh": "🇸🇦 الرياض / الكويت / البحرين / قطر (UTC+3)",
+    "Asia/Dubai": "🇦🇪 دبي / أبوظبي / مسقط (UTC+4)",
+    "Africa/Cairo": "🇪🇬 القاهرة (UTC+2)",
+    "Asia/Baghdad": "🇮🇶 بغداد (UTC+3)",
+    "Asia/Amman": "🇯🇴 عمّان (UTC+3)",
+    "Asia/Beirut": "🇱🇧 بيروت (UTC+3)",
+    "Asia/Damascus": "🇸🇾 دمشق (UTC+3)",
+    "Asia/Jerusalem": "🇵🇸 القدس (UTC+3)",
+    "Asia/Aden": "🇾🇪 صنعاء (UTC+3)",
+    "Africa/Khartoum": "🇸🇩 الخرطوم (UTC+2)",
+    "Africa/Tripoli": "🇱🇾 طرابلس (UTC+2)",
+    "Africa/Tunis": "🇹🇳 تونس (UTC+1)",
+    "Africa/Algiers": "🇩🇿 الجزائر (UTC+1)",
+    "Africa/Casablanca": "🇲🇦 الدار البيضاء (UTC+1)",
+    "Asia/Tehran": "🇮🇷 طهران (UTC+3:30)",
+    "Asia/Istanbul": "🇹🇷 إسطنبول (UTC+3)",
+    "UTC": "🌍 UTC (التوقيت العالمي)",
+}
 
 # ===================== نظام الترجمة / Translation System =====================
 LANGS = {
@@ -162,6 +184,16 @@ LANGS = {
         "disp_needs_fix": "يحتاج صيانة",
         "disp_admin": "مدير",
         "disp_tech": "فني",
+        # Custom date (backdating)
+        "use_custom_date": "📅 استخدام تاريخ مخصّص (سابق)",
+        "custom_date_label": "التاريخ",
+        "custom_time_label": "الوقت",
+        "backdate_info": "ℹ️ متاح للمدير والمشرف فقط — حد أقصى 30 يوم سابق",
+        # Timezone
+        "tz_h": "🕐 إعدادات الوقت والمنطقة الزمنية",
+        "tz_label": "المنطقة الزمنية",
+        "tz_current": "الوقت الحالي حسب الإعداد:",
+        "tz_updated": "✅ تم تحديث المنطقة الزمنية إلى: {}",
         # Edit Role
         "edit_role_h": "🛡️ تعديل دور (صلاحيات) المستخدم",
         "current_role": "الدور الحالي:",
@@ -302,6 +334,14 @@ LANGS = {
         "disp_needs_fix": "Needs Repair",
         "disp_admin": "Admin",
         "disp_tech": "Technician",
+        "use_custom_date": "📅 Use custom (past) date",
+        "custom_date_label": "Date",
+        "custom_time_label": "Time",
+        "backdate_info": "ℹ️ Admin & Supervisor only — max 30 days back",
+        "tz_h": "🕐 Time & Timezone Settings",
+        "tz_label": "Timezone",
+        "tz_current": "Current time per setting:",
+        "tz_updated": "✅ Timezone updated to: {}",
         "edit_role_h": "🛡️ Edit User Role / Permissions",
         "current_role": "Current role:",
         "new_role_label": "New role:",
@@ -507,6 +547,42 @@ def is_hashed(password_field: str) -> bool:
     return isinstance(password_field, str) and password_field.startswith("pbkdf2$")
 
 
+# ===================== الإعدادات والوقت =====================
+
+def get_setting(key: str, default: str = "") -> str:
+    """قراءة إعداد عام من قاعدة البيانات."""
+    try:
+        with get_db() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+            return row["value"] if row else default
+    except Exception:
+        return default
+
+
+def set_setting(key: str, value: str) -> None:
+    """حفظ إعداد عام."""
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value)
+        )
+
+
+def get_timezone() -> ZoneInfo:
+    """الحصول على المنطقة الزمنية المضبوطة (افتراضياً الرياض)."""
+    tz_name = get_setting("timezone", "Asia/Riyadh")
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return ZoneInfo("Asia/Riyadh")
+
+
+def now_local() -> datetime:
+    """التاريخ والوقت الحالي بالمنطقة الزمنية المضبوطة."""
+    return datetime.now(get_timezone())
+
+
 # ===================== دوال مساعدة =====================
 
 @contextmanager
@@ -579,6 +655,49 @@ def require_permission(perm: str):
         st.stop()
 
 
+# ===================== دالة التاريخ المخصص (للمدير والمشرف) =====================
+
+def can_backdate() -> bool:
+    """صلاحية تسجيل تاريخ سابق — المدير والمشرف فقط."""
+    role = st.session_state.get('user_role', '')
+    return role in (Role.ADMIN, Role.SUPERVISOR)
+
+
+def custom_date_input(key_prefix: str, max_days_back: int = 30) -> str:
+    """عرض حقل تاريخ مخصّص (للمدير والمشرف). يعيد سلسلة YYYY-MM-DD HH:MM."""
+    if not can_backdate():
+        return now_local().strftime("%Y-%m-%d %H:%M")
+
+    use_custom = st.checkbox(t("use_custom_date"), key=f"{key_prefix}_toggle")
+    if not use_custom:
+        return now_local().strftime("%Y-%m-%d %H:%M")
+
+    from datetime import timedelta as _td
+    _now = now_local()
+    min_date = (_now - _td(days=max_days_back)).date()
+    max_date = _now.date()
+
+    st.caption(t("backdate_info"))
+    cols = st.columns(2)
+    with cols[0]:
+        d = st.date_input(
+            t("custom_date_label"),
+            value=max_date,
+            min_value=min_date,
+            max_value=max_date,
+            key=f"{key_prefix}_date"
+        )
+    with cols[1]:
+        tm = st.time_input(
+            t("custom_time_label"),
+            value=_now.time(),
+            key=f"{key_prefix}_time"
+        )
+    # دمج التاريخ والوقت + إرفاق المنطقة الزمنية
+    combined = datetime.combine(d, tm).replace(tzinfo=get_timezone())
+    return combined.strftime("%Y-%m-%d %H:%M")
+
+
 # ===================== تهيئة قاعدة البيانات =====================
 
 def init_db():
@@ -610,10 +729,20 @@ def init_db():
                        photo TEXT,
                        notes TEXT
                      )''')
+        # جدول الإعدادات العامة (المنطقة الزمنية وغيرها)
+        c.execute('''CREATE TABLE IF NOT EXISTS settings (
+                       key TEXT PRIMARY KEY,
+                       value TEXT
+                     )''')
 
         # ترقية: إضافة عمود tech_name لجدول النظافة إن لم يكن موجوداً
         try:
             c.execute("ALTER TABLE cleaning ADD COLUMN tech_name TEXT")
+        except sqlite3.OperationalError:
+            pass
+        # ترقية: إضافة عمود closed_date لجدول الصيانة إن لم يكن موجوداً
+        try:
+            c.execute("ALTER TABLE maintenance ADD COLUMN closed_date TEXT")
         except sqlite3.OperationalError:
             pass
 
@@ -795,6 +924,8 @@ elif choice == t("m_maintenance"):
         if not has_permission("maint_open"):
             st.info(t("admin_only"))
         else:
+            # حقل التاريخ المخصص (خارج النموذج لأن checkbox يحتاج rerun)
+            _maint_date = custom_date_input("maint_open")
             with st.form("add_maintenance"):
                 dept  = st.selectbox(t("dept"), ["تكييف", "كهرباء", "سباكة", "نجارة", "أخرى"], format_func=tr_display)
                 loc   = st.text_input(t("location_label"))
@@ -807,7 +938,7 @@ elif choice == t("m_maintenance"):
                                 "INSERT INTO maintenance (date,dept,office_name,description,status,img_before) "
                                 "VALUES (?,?,?,?,?,?)",
                                 (
-                                    datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                    _maint_date,
                                     dept, loc, desc, Status.PENDING, file_to_base64(img_b)
                                 )
                             )
@@ -831,6 +962,8 @@ elif choice == t("m_maintenance"):
                 }
                 selected = st.selectbox(t("select_report"), list(options.keys()))
                 task_id  = options[selected]
+                # حقل تاريخ مخصّص للإغلاق
+                _close_date = custom_date_input("maint_close")
                 with st.form("close_task"):
                     action = st.text_area(t("action_taken"))
                     img_a  = st.file_uploader(t("photo_after_label"), type=['jpg', 'png', 'jpeg'])
@@ -838,11 +971,11 @@ elif choice == t("m_maintenance"):
                         with get_db() as conn:
                             conn.execute(
                                 "UPDATE maintenance "
-                                "SET status=?, action_taken=?, img_after=?, tech_name=? "
+                                "SET status=?, action_taken=?, img_after=?, tech_name=?, closed_date=? "
                                 "WHERE id=?",
                                 (
                                     Status.DONE, action, file_to_base64(img_a),
-                                    st.session_state.username, task_id
+                                    st.session_state.username, _close_date, task_id
                                 )
                             )
                         st.success(t("report_closed"))
@@ -860,6 +993,7 @@ elif choice == t("m_cleaning"):
         if not has_permission("cleaning_add"):
             st.info(t("admin_only"))
         else:
+            _clean_date = custom_date_input("clean_add")
             with st.form("cleaning_form"):
                 area    = st.text_input(t("clean_area"))
                 c_type  = st.selectbox(
@@ -876,7 +1010,7 @@ elif choice == t("m_cleaning"):
                                 "INSERT INTO cleaning (date,area,type,img_before,img_after,tech_name) "
                                 "VALUES (?,?,?,?,?,?)",
                                 (
-                                    datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                    _clean_date,
                                     area, c_type,
                                     file_to_base64(c_img_b), file_to_base64(c_img_a),
                                     st.session_state.username
@@ -942,6 +1076,9 @@ elif choice == t("m_daily"):
             st.info(t("admin_only"))
         else:
             st.info(t("inspection_info"))
+            # حقل التاريخ المخصّص للجولة (يُحفظ في session_state ليُستخدم داخل النموذج)
+            _daily_custom = custom_date_input("daily_round")
+            st.session_state['_daily_custom_date_str'] = _daily_custom
 
             with st.form("daily_inspection_form", clear_on_submit=False):
                 general_notes = st.text_area(t("general_notes"), key="dc_general_notes")
@@ -991,8 +1128,8 @@ elif choice == t("m_daily"):
                                 f"الصور الناقصة: {'، '.join(missing_photos)}"
                             )
                         else:
-                            batch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-                            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+                            batch_id = now_local().strftime("%Y%m%d_%H%M%S")
+                            ts = now_local().strftime("%Y-%m-%d %H:%M")
                             with get_db() as conn:
                                 for item, d in checked.items():
                                     conn.execute(
@@ -1146,7 +1283,7 @@ elif choice == t("m_report_maint"):
     <div class="header-stripe"></div>
   </div>
   <div class="meta-bar">
-    <div class="meta-item">📅 <strong>تاريخ الإصدار:</strong> {datetime.now().strftime('%Y-%m-%d')}</div>
+    <div class="meta-item">📅 <strong>تاريخ الإصدار:</strong> {now_local().strftime('%Y-%m-%d')}</div>
     <div class="meta-item">👤 <strong>أُعدَّ بواسطة:</strong> {safe(st.session_state.username)}</div>
     <div class="meta-item">📌 <strong>الحالة:</strong> <span class="status-badge">{safe(r['status'])}</span></div>
   </div>
@@ -1288,7 +1425,7 @@ elif choice == t("m_report_clean"):
     <div class="header-stripe"></div>
   </div>
   <div class="meta-bar">
-    <div class="meta-item">📅 <strong>تاريخ الإصدار:</strong> {datetime.now().strftime('%Y-%m-%d')}</div>
+    <div class="meta-item">📅 <strong>تاريخ الإصدار:</strong> {now_local().strftime('%Y-%m-%d')}</div>
     <div class="meta-item">👤 <strong>أُعدَّ بواسطة:</strong> {safe(st.session_state.username)}</div>
   </div>
   <div class="body">
@@ -1466,7 +1603,7 @@ elif choice == t("m_report_daily"):
   <div class="meta-bar">
     <div class="meta-item">📅 <strong>تاريخ الجولة:</strong> {safe(report_date)}</div>
     <div class="meta-item">👤 <strong>الفني المنفّذ:</strong> {safe(tech_name)}</div>
-    <div class="meta-item">🕐 <strong>تاريخ الإصدار:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
+    <div class="meta-item">🕐 <strong>تاريخ الإصدار:</strong> {now_local().strftime('%Y-%m-%d %H:%M')}</div>
   </div>
   <div class="body">
     <div class="stats">
@@ -1641,7 +1778,7 @@ td{{padding:9px 8px;text-align:center;border:1px solid #e8ecf2;color:#333d4d;}}
 </style></head>
 <body><div class="page">
 <div class="header"><div class="header-top">{logo_right_html}<div class="header-center"><div class="org">{safe(org_name)}</div><div class="title">التقرير الشهري للمرافق</div><div class="period">الفترة: {date_from.strftime('%Y-%m-%d')} — {date_to.strftime('%Y-%m-%d')}</div></div>{logo_left_html}</div><div class="header-stripe"></div></div>
-<div class="meta-bar"><div class="meta-item">📅 <strong>تاريخ الإصدار:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M')}</div><div class="meta-item">👤 <strong>أُعدَّ بواسطة:</strong> {safe(st.session_state.username)}</div><div class="meta-item">📊 <strong>نسبة الإنجاز:</strong> {pct}</div></div>
+<div class="meta-bar"><div class="meta-item">📅 <strong>تاريخ الإصدار:</strong> {now_local().strftime('%Y-%m-%d %H:%M')}</div><div class="meta-item">👤 <strong>أُعدَّ بواسطة:</strong> {safe(st.session_state.username)}</div><div class="meta-item">📊 <strong>نسبة الإنجاز:</strong> {pct}</div></div>
 <div class="body">
 <div class="stats">
 <div class="stat-card"><div class="num">{total}</div><div class="lbl">إجمالي البلاغات</div></div>
@@ -1654,7 +1791,7 @@ td{{padding:9px 8px;text-align:center;border:1px solid #e8ecf2;color:#333d4d;}}
 <hr class="divider"><div class="section-title">🧹 جدول مهام النظافة</div>{clean_table}
 <hr class="divider"><div class="section-title">✅ جدول الجولات اليومية للتفقّد</div>{daily_table}
 </div>
-<div class="footer"><div class="footer-info"><strong>تاريخ الإصدار:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M')}<br><strong>أُعدَّ بواسطة:</strong> {safe(st.session_state.username)}</div><div class="stamp">تم<br>الاعتماد<br>✦</div><div class="footer-info" style="text-align:left;"><strong>نسبة الإنجاز:</strong> {pct}<br><strong>إجمالي البلاغات:</strong> {total}</div></div>
+<div class="footer"><div class="footer-info"><strong>تاريخ الإصدار:</strong> {now_local().strftime('%Y-%m-%d %H:%M')}<br><strong>أُعدَّ بواسطة:</strong> {safe(st.session_state.username)}</div><div class="stamp">تم<br>الاعتماد<br>✦</div><div class="footer-info" style="text-align:left;"><strong>نسبة الإنجاز:</strong> {pct}<br><strong>إجمالي البلاغات:</strong> {total}</div></div>
 <div class="confidential">{safe(report_footer)}</div>
 </div></body></html>"""
 
@@ -1768,6 +1905,33 @@ elif choice == t("m_users"):
 
     st.divider()
 
+    # ============ المنطقة الزمنية ============
+    st.subheader(t("tz_h"))
+
+    _current_tz = get_setting("timezone", "Asia/Riyadh")
+    _tz_keys = list(TIMEZONES.keys())
+    try:
+        _tz_idx = _tz_keys.index(_current_tz)
+    except ValueError:
+        _tz_idx = 0
+
+    _selected_tz = st.selectbox(
+        t("tz_label"),
+        options=_tz_keys,
+        format_func=lambda k: TIMEZONES[k],
+        index=_tz_idx,
+        key="tz_select"
+    )
+    st.caption(f"{t('tz_current')} **{now_local().strftime('%Y-%m-%d %H:%M:%S')}**")
+
+    if _selected_tz != _current_tz:
+        if st.button(t("update_btn"), key="tz_update_btn", use_container_width=True):
+            set_setting("timezone", _selected_tz)
+            st.success(t("tz_updated", TIMEZONES[_selected_tz]))
+            st.rerun()
+
+    st.divider()
+
     # ============ النسخة الاحتياطية ============
     st.subheader(t("backup_h"))
     st.info(t("backup_info"))
@@ -1797,7 +1961,7 @@ elif choice == t("m_users"):
         st.download_button(
             label=t("backup_btn"),
             data=db_bytes,
-            file_name=f"taqyeem_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
+            file_name=f"taqyeem_backup_{now_local().strftime('%Y%m%d_%H%M%S')}.db",
             mime="application/x-sqlite3",
             use_container_width=True,
             type="primary"
