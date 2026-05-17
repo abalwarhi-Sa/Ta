@@ -153,8 +153,8 @@ LANGS = {
         "download_cleaning": "📥 تحميل تقرير النظافة (HTML)",
         "to_official_caption": "ℹ️ لإصدار تقرير رسمي مع التوقيع، انتقل إلى تقرير نظافة فردي.",
         # Defaults
-        "default_org": "وزارة الشؤون البلدية",
-        "default_footer": "سري - للاستخدام الرسمي فقط",
+        "default_org": "",
+        "default_footer": "",
         # Status display (for translating stored Arabic values)
         "disp_pending": "قيد الانتظار",
         "disp_done": "تم الإصلاح",
