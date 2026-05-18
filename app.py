@@ -717,8 +717,8 @@ def render_img(b64: str, style: str, placeholder_html: str = None) -> str:
     return '<div class="photo-placeholder">لا توجد صورة</div>'
 
 
-def create_excel_zip(df_m, df_c, df_d_items, date_from, date_to) -> bytes:
-    """ينشئ ملف ZIP يحتوي على Excel + الصور في مجلدات مرقمة برقم الطلب."""
+def create_excel_zip(date_from, date_to) -> bytes:
+    """ينشئ ملف ZIP مع Excel + الصور — يقرأ البيانات سطر-سطر لتوفير الذاكرة."""
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, Alignment, PatternFill
@@ -726,11 +726,14 @@ def create_excel_zip(df_m, df_c, df_d_items, date_from, date_to) -> bytes:
         st.error("⚠️ مكتبة openpyxl غير مثبتة")
         return b""
 
+    df_from = date_from.strftime("%Y-%m-%d")
+    df_to = date_to.strftime("%Y-%m-%d 23:59")
+
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
         wb = Workbook()
 
-        # ========== ورقة الصيانة ==========
+        # ========== ورقة الصيانة (streaming) ==========
         ws_m = wb.active
         ws_m.title = "الصيانة"
         try:
@@ -742,140 +745,162 @@ def create_excel_zip(df_m, df_c, df_d_items, date_from, date_to) -> bytes:
             'الأولوية', 'الفني المسؤول', 'الفني المنفّذ',
             'تاريخ الإغلاق', 'الإجراء المتخذ'
         ])
-        for _, row in df_m.iterrows():
-            rid = row['id']
-            ws_m.append([
-                f"TQ-{rid:04d}",
-                row['date'] or '',
-                row['dept'] or '',
-                row['office_name'] or '',
-                str(row['description'] or '')[:500],
-                row['status'] or '',
-                row['priority'] if 'priority' in row.index and row['priority'] else 'عادي',
-                row['assigned_to'] if 'assigned_to' in row.index and row['assigned_to'] else '',
-                row['tech_name'] or '',
-                row['closed_date'] if 'closed_date' in row.index and row['closed_date'] else '',
-                str(row['action_taken'] or '')[:500],
-            ])
-            # حفظ الصور
-            if row['img_before']:
-                try:
-                    zf.writestr(f"Photos/Maintenance/TQ-{rid:04d}/before.jpg", base64.b64decode(row['img_before']))
-                except Exception:
-                    pass
-            if row['img_after']:
-                try:
-                    zf.writestr(f"Photos/Maintenance/TQ-{rid:04d}/after.jpg", base64.b64decode(row['img_after']))
-                except Exception:
-                    pass
+        with get_db() as conn:
+            cur = conn.execute(
+                "SELECT id, date, dept, office_name, description, status, "
+                "priority, assigned_to, tech_name, closed_date, action_taken, "
+                "img_before, img_after FROM maintenance "
+                "WHERE date >= ? AND date <= ? ORDER BY id ASC",
+                (df_from, df_to)
+            )
+            for row in cur:
+                rid = row['id']
+                ws_m.append([
+                    f"TQ-{rid:04d}",
+                    row['date'] or '',
+                    row['dept'] or '',
+                    row['office_name'] or '',
+                    str(row['description'] or '')[:500],
+                    row['status'] or '',
+                    row['priority'] if 'priority' in row.keys() and row['priority'] else 'عادي',
+                    row['assigned_to'] if 'assigned_to' in row.keys() and row['assigned_to'] else '',
+                    row['tech_name'] or '',
+                    row['closed_date'] if 'closed_date' in row.keys() and row['closed_date'] else '',
+                    str(row['action_taken'] or '')[:500],
+                ])
+                # كتابة الصور مباشرة في ZIP بدون الاحتفاظ بها
+                if row['img_before']:
+                    try:
+                        zf.writestr(
+                            f"Photos/Maintenance/TQ-{rid:04d}/before.jpg",
+                            base64.b64decode(row['img_before'])
+                        )
+                    except Exception:
+                        pass
+                if row['img_after']:
+                    try:
+                        zf.writestr(
+                            f"Photos/Maintenance/TQ-{rid:04d}/after.jpg",
+                            base64.b64decode(row['img_after'])
+                        )
+                    except Exception:
+                        pass
 
-        # ========== ورقة النظافة ==========
+        # ========== ورقة النظافة (streaming) ==========
         ws_c = wb.create_sheet("النظافة")
         try:
             ws_c.sheet_view.rightToLeft = True
         except Exception:
             pass
         ws_c.append(['الرقم', 'التاريخ', 'المنطقة', 'نوع التنظيف', 'المنفّذ'])
-        for _, row in df_c.iterrows():
-            rid = row['id']
-            ws_c.append([
-                f"CL-{rid:04d}",
-                row['date'] or '',
-                row['area'] or '',
-                row['type'] or '',
-                row['tech_name'] if 'tech_name' in row.index and row['tech_name'] else '',
-            ])
-            if row['img_before']:
-                try:
-                    zf.writestr(f"Photos/Cleaning/CL-{rid:04d}/before.jpg", base64.b64decode(row['img_before']))
-                except Exception:
-                    pass
-            if row['img_after']:
-                try:
-                    zf.writestr(f"Photos/Cleaning/CL-{rid:04d}/after.jpg", base64.b64decode(row['img_after']))
-                except Exception:
-                    pass
+        with get_db() as conn:
+            cur = conn.execute(
+                "SELECT id, date, area, type, tech_name, img_before, img_after "
+                "FROM cleaning WHERE date >= ? AND date <= ? ORDER BY id ASC",
+                (df_from, df_to)
+            )
+            for row in cur:
+                rid = row['id']
+                tech = row['tech_name'] if 'tech_name' in row.keys() and row['tech_name'] else ''
+                ws_c.append([
+                    f"CL-{rid:04d}",
+                    row['date'] or '',
+                    row['area'] or '',
+                    row['type'] or '',
+                    tech,
+                ])
+                if row['img_before']:
+                    try:
+                        zf.writestr(
+                            f"Photos/Cleaning/CL-{rid:04d}/before.jpg",
+                            base64.b64decode(row['img_before'])
+                        )
+                    except Exception:
+                        pass
+                if row['img_after']:
+                    try:
+                        zf.writestr(
+                            f"Photos/Cleaning/CL-{rid:04d}/after.jpg",
+                            base64.b64decode(row['img_after'])
+                        )
+                    except Exception:
+                        pass
 
-        # ========== ورقة الجولات اليومية ==========
+        # ========== ورقة الجولات اليومية (streaming) ==========
         ws_d = wb.create_sheet("الجولات_اليومية")
         try:
             ws_d.sheet_view.rightToLeft = True
         except Exception:
             pass
         ws_d.append(['رقم الجولة', 'التاريخ', 'المنفّذ', 'البند', 'الحالة', 'ملاحظات'])
-        for _, row in df_d_items.iterrows():
-            bid = row['batch_id']
-            ws_d.append([
-                f"DC-{bid}",
-                row['date'] or '',
-                row['tech_name'] or '',
-                row['item'] or '',
-                row['status'] or '',
-                str(row['notes'] or '')[:500],
-            ])
-            if row['photo']:
-                try:
-                    # تنظيف اسم البند لاستخدامه في اسم الملف
-                    item_clean = "".join(c for c in str(row['item'] or 'item') if c.isalnum() or c in (' ', '_', '-'))[:50] or "item"
-                    item_clean = item_clean.strip().replace(' ', '_')
-                    zf.writestr(
-                        f"Photos/Daily_Checks/DC-{bid}/{item_clean}_{row['id']}.jpg",
-                        base64.b64decode(row['photo'])
-                    )
-                except Exception:
-                    pass
+        with get_db() as conn:
+            cur = conn.execute(
+                "SELECT id, batch_id, date, tech_name, item, status, photo, notes "
+                "FROM daily_checks WHERE date >= ? AND date <= ? "
+                "ORDER BY batch_id, id",
+                (df_from, df_to)
+            )
+            for row in cur:
+                bid = row['batch_id']
+                ws_d.append([
+                    f"DC-{bid}",
+                    row['date'] or '',
+                    row['tech_name'] or '',
+                    row['item'] or '',
+                    row['status'] or '',
+                    str(row['notes'] or '')[:500],
+                ])
+                if row['photo']:
+                    try:
+                        item_clean = "".join(
+                            c for c in str(row['item'] or 'item')
+                            if c.isalnum() or c in (' ', '_', '-')
+                        )[:50] or "item"
+                        item_clean = item_clean.strip().replace(' ', '_')
+                        zf.writestr(
+                            f"Photos/Daily_Checks/DC-{bid}/{item_clean}_{row['id']}.jpg",
+                            base64.b64decode(row['photo'])
+                        )
+                    except Exception:
+                        pass
 
-        # ========== تنسيق الأوراق ==========
+        # ========== تنسيق رؤوس الأوراق فقط (لتوفير الذاكرة) ==========
         for ws in [ws_m, ws_c, ws_d]:
-            # تنسيق رأس الجدول
             for cell in ws[1]:
                 cell.font = Font(bold=True, color="FFFFFF", size=11)
                 cell.fill = PatternFill(start_color="1B3A6B", end_color="1B3A6B", fill_type="solid")
                 cell.alignment = Alignment(horizontal="center", vertical="center")
-            # تنسيق المحاذاة لكل البيانات
-            for row_cells in ws.iter_rows(min_row=2):
-                for cell in row_cells:
-                    cell.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
-            # ضبط عرض الأعمدة
-            for col in ws.columns:
-                max_length = 10
-                column_letter = col[0].column_letter
-                for cell in col:
-                    try:
-                        cell_len = len(str(cell.value or ''))
-                        if cell_len > max_length:
-                            max_length = cell_len
-                    except Exception:
-                        pass
-                ws.column_dimensions[column_letter].width = min(max_length + 3, 60)
+            # عرض الأعمدة افتراضي معقول
+            for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                ws.column_dimensions[col_letter].width = 18
 
         # حفظ Excel داخل ZIP
         excel_buffer = BytesIO()
         wb.save(excel_buffer)
         zf.writestr(
-            f"Monthly_Report_{date_from}_to_{date_to}.xlsx",
+            f"Monthly_Report_{df_from}_to_{date_to.strftime('%Y-%m-%d')}.xlsx",
             excel_buffer.getvalue()
         )
+        excel_buffer.close()
 
-        # إضافة ملف README بداخل الـ ZIP
-        readme = f"""تقرير شهري
-==================
-الفترة: من {date_from} إلى {date_to}
-تاريخ الإصدار: {now_local().strftime('%Y-%m-%d %H:%M')}
+        # README
+        readme = (
+            "تقرير شهري\n"
+            "==================\n"
+            f"الفترة: من {df_from} إلى {date_to.strftime('%Y-%m-%d')}\n"
+            f"تاريخ الإصدار: {now_local().strftime('%Y-%m-%d %H:%M')}\n\n"
+            "محتويات الملف:\n"
+            "- Monthly_Report_*.xlsx : ملف Excel فيه 3 أوراق\n"
+            "- Photos/Maintenance/TQ-XXXX/ : صور كل بلاغ صيانة\n"
+            "- Photos/Cleaning/CL-XXXX/    : صور كل سجل نظافة\n"
+            "- Photos/Daily_Checks/DC-XX/  : صور كل جولة تفقد\n\n"
+            "نظام إدارة المرافق - تقييم\n"
+        )
+        zf.writestr("README.txt", readme.replace('\\n', '\n'))
 
-محتويات الملف:
-- Monthly_Report_{date_from}_to_{date_to}.xlsx : ملف Excel فيه 3 أوراق (الصيانة + النظافة + الجولات اليومية)
-- Photos/Maintenance/TQ-XXXX/ : صور كل بلاغ صيانة
-- Photos/Cleaning/CL-XXXX/    : صور كل سجل نظافة
-- Photos/Daily_Checks/DC-XX/  : صور كل جولة تفقد
-
-نظام إدارة المرافق - تقييم
-"""
-        zf.writestr("README.txt", readme)
-
-    zip_buffer.seek(0)
-    return zip_buffer.getvalue()
-
+    data = zip_buffer.getvalue()
+    zip_buffer.close()
+    return data
 
 def require_admin():
     """يوقف تنفيذ الصفحة إذا لم يكن المستخدم مديراً (تحقق خلفي حقيقي)."""
@@ -2135,16 +2160,23 @@ td{{padding:9px 8px;text-align:center;border:1px solid #e8ecf2;color:#333d4d;}}
             )
         with col_dl2:
             st.caption(t("excel_zip_info"))
-            with st.spinner("جارٍ تحضير ملف ZIP..."):
-                _zip_data = create_excel_zip(df_m, df_c, df_d_items, date_from, date_to)
-            if _zip_data:
+            # زر مستقل لتجنب توليد ZIP تلقائي كل مرة (يستهلك الذاكرة)
+            if st.button(t("download_excel_zip"), use_container_width=True, type="primary", key="gen_zip"):
+                with st.spinner("جارٍ تحضير ملف ZIP..."):
+                    _zip_data = create_excel_zip(date_from, date_to)
+                if _zip_data:
+                    st.session_state['_last_zip'] = _zip_data
+                    st.session_state['_last_zip_name'] = f"Monthly_Report_{date_from}_to_{date_to}.zip"
+                    st.rerun()
+            # إظهار زر التحميل لو الـ ZIP جاهز
+            if '_last_zip' in st.session_state:
                 st.download_button(
-                    t("download_excel_zip"),
-                    _zip_data,
-                    file_name=f"Monthly_Report_{date_from}_to_{date_to}.zip",
+                    f"⬇️ تحميل {st.session_state.get('_last_zip_name', 'ZIP')}",
+                    st.session_state['_last_zip'],
+                    file_name=st.session_state.get('_last_zip_name', 'report.zip'),
                     mime="application/zip",
                     use_container_width=True,
-                    type="primary"
+                    on_click=lambda: st.session_state.pop('_last_zip', None) and st.session_state.pop('_last_zip_name', None)
                 )
 
 # ===================== إدارة المستخدمين (مدير فقط) =====================
