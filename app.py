@@ -5,11 +5,19 @@ import pandas as pd
 from datetime import datetime
 from contextlib import contextmanager
 from zoneinfo import ZoneInfo
+from io import BytesIO
+import zipfile
 import base64
 import hashlib
 import secrets
 import html
 import streamlit.components.v1 as components
+
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
 
 # ===================== الثوابت =====================
 # مسار قاعدة البيانات: من متغير بيئة (للنشر) أو محلي افتراضياً
@@ -20,7 +28,7 @@ _db_dir = os.path.dirname(DB_NAME)
 if _db_dir and not os.path.exists(_db_dir):
     os.makedirs(_db_dir, exist_ok=True)
 
-MAX_IMG_SIZE_MB = 5
+MAX_IMG_SIZE_MB = 20  # الحد الأعلى للصورة المرفوعة قبل الضغط
 MAX_LOGIN_ATTEMPTS = 5
 MIN_PASSWORD_LEN = 6
 
@@ -173,10 +181,12 @@ LANGS = {
         "generate_report": "🔍 استخراج التقرير",
         "download_monthly": "📥 تحميل التقرير الشهري (HTML)",
         "download_cleaning": "📥 تحميل تقرير النظافة (HTML)",
+        "download_excel_zip": "📤 تصدير Excel + الصور (ZIP)",
+        "excel_zip_info": "ℹ️ ملف ZIP يحتوي على ملف Excel + الصور في مجلدات مرقمة برقم الطلب",
         "to_official_caption": "ℹ️ لإصدار تقرير رسمي مع التوقيع، انتقل إلى تقرير نظافة فردي.",
         # Defaults
-        "default_org": " ",
-        "default_footer": " ",
+        "default_org": "وزارة الشؤون البلدية",
+        "default_footer": "سري - للاستخدام الرسمي فقط",
         # Status display (for translating stored Arabic values)
         "disp_pending": "قيد الانتظار",
         "disp_done": "تم الإصلاح",
@@ -184,6 +194,14 @@ LANGS = {
         "disp_needs_fix": "يحتاج صيانة",
         "disp_admin": "مدير",
         "disp_tech": "فني",
+        # Assignment & Priority
+        "assigned_to": "الفني المسؤول",
+        "assign_to_label": "إسناد البلاغ إلى:",
+        "no_assignment": "بدون إسناد",
+        "priority_label": "الأولوية",
+        "priority_urgent": "🔴 عاجل",
+        "priority_normal": "🟢 عادي",
+        "priority_low": "⚪ منخفض",
         # Custom date (backdating)
         "use_custom_date": "📅 استخدام تاريخ مخصّص (سابق)",
         "custom_date_label": "التاريخ",
@@ -325,15 +343,24 @@ LANGS = {
         "generate_report": "🔍 Generate Report",
         "download_monthly": "📥 Download Monthly Report (HTML)",
         "download_cleaning": "📥 Download Cleaning Report (HTML)",
+        "download_excel_zip": "📤 Export Excel + Photos (ZIP)",
+        "excel_zip_info": "ℹ️ ZIP file contains Excel + photos in folders named by report number",
         "to_official_caption": "ℹ️ For an official report with signatures, go to Single Cleaning Report.",
-        "default_org": " ",
-        "default_footer": " ",
+        "default_org": "Municipal Affairs Ministry",
+        "default_footer": "Confidential - Official Use Only",
         "disp_pending": "Pending",
         "disp_done": "Completed",
         "disp_ok": "OK",
         "disp_needs_fix": "Needs Repair",
         "disp_admin": "Admin",
         "disp_tech": "Technician",
+        "assigned_to": "Assigned To",
+        "assign_to_label": "Assign report to:",
+        "no_assignment": "Unassigned",
+        "priority_label": "Priority",
+        "priority_urgent": "🔴 Urgent",
+        "priority_normal": "🟢 Normal",
+        "priority_low": "⚪ Low",
         "use_custom_date": "📅 Use custom (past) date",
         "custom_date_label": "Date",
         "custom_time_label": "Time",
@@ -412,6 +439,10 @@ DISPLAY_MAP_EN = {
     "سباكة": "Plumbing",
     "نجارة": "Carpentry",
     "أخرى": "Other",
+    # أولويات الصيانة / Priorities
+    "عاجل": "🔴 Urgent",
+    "عادي": "🟢 Normal",
+    "منخفض": "⚪ Low",
     # أنواع التنظيف / Cleaning types
     "يومي روتيني": "Daily Routine",
     "تنظيف عميق": "Deep Cleaning",
@@ -506,6 +537,14 @@ class CheckStatus:
     OK = "سليم"
     NEEDS_FIX = "يحتاج صيانة"
     NOT_CHECKED = "—"
+
+
+class Priority:
+    URGENT = "عاجل"
+    NORMAL = "عادي"
+    LOW = "منخفض"
+
+PRIORITIES = ["عاجل", "عادي", "منخفض"]
 
 
 # ===================== إعدادات الصفحة =====================
@@ -612,15 +651,61 @@ def safe(text) -> str:
     return html.escape(str(text))
 
 
-def file_to_base64(uploaded_file) -> str:
-    """يحوّل الملف المرفوع إلى base64 مع التحقق من الحجم."""
+def file_to_base64(uploaded_file, max_dim: int = 1280, quality: int = 80) -> str:
+    """
+    يحوّل الملف المرفوع إلى base64 مع ضغط ذكي.
+    - يُصغّر أي صورة أكبر من max_dim × max_dim إلى الحدود (مع الحفاظ على النسب)
+    - يحفظ كـ JPEG بجودة 80% (يوفر 70-90% من الحجم بدون فقدان دقة ملحوظ)
+    """
     if uploaded_file is None:
         return ""
     data = uploaded_file.getvalue()
+
+    # تحقق سريع من الحد الأقصى للأمان (20 ميجا)
     if len(data) > MAX_IMG_SIZE_MB * 1024 * 1024:
-        st.warning(f"⚠️ حجم الصورة كبير (أكبر من {MAX_IMG_SIZE_MB} ميجا). تم تجاهلها.")
+        st.warning(f"⚠️ حجم الصورة كبير جداً (أكبر من {MAX_IMG_SIZE_MB} ميجا). الرجاء استخدام صورة أصغر.")
         return ""
-    return base64.b64encode(data).decode()
+
+    # إذا Pillow غير متوفر، نخزن الصورة كما هي
+    if not HAS_PIL:
+        return base64.b64encode(data).decode()
+
+    try:
+        img = Image.open(BytesIO(data))
+
+        # تصحيح اتجاه الصورة من EXIF (مهم لصور الجوّال)
+        try:
+            from PIL import ImageOps
+            img = ImageOps.exif_transpose(img)
+        except Exception:
+            pass
+
+        # تحويل لـ RGB (JPEG لا يدعم RGBA/P)
+        if img.mode in ('RGBA', 'LA', 'P'):
+            bg = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            bg.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            img = bg
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
+
+        # تصغير الأبعاد إن كانت أكبر من max_dim
+        if max(img.size) > max_dim:
+            img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+
+        # حفظ كـ JPEG مضغوط
+        buf = BytesIO()
+        img.save(buf, format='JPEG', quality=quality, optimize=True, progressive=True)
+        compressed = buf.getvalue()
+
+        return base64.b64encode(compressed).decode()
+    except Exception as e:
+        st.warning(f"⚠️ خطأ في معالجة الصورة: {e}")
+        # في حالة فشل المعالجة، نخزن الأصل لو حجمه معقول
+        if len(data) <= 5 * 1024 * 1024:
+            return base64.b64encode(data).decode()
+        return ""
 
 
 def render_img(b64: str, style: str, placeholder_html: str = None) -> str:
@@ -630,6 +715,166 @@ def render_img(b64: str, style: str, placeholder_html: str = None) -> str:
     if placeholder_html is not None:
         return placeholder_html
     return '<div class="photo-placeholder">لا توجد صورة</div>'
+
+
+def create_excel_zip(df_m, df_c, df_d_items, date_from, date_to) -> bytes:
+    """ينشئ ملف ZIP يحتوي على Excel + الصور في مجلدات مرقمة برقم الطلب."""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, PatternFill
+    except ImportError:
+        st.error("⚠️ مكتبة openpyxl غير مثبتة")
+        return b""
+
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        wb = Workbook()
+
+        # ========== ورقة الصيانة ==========
+        ws_m = wb.active
+        ws_m.title = "الصيانة"
+        try:
+            ws_m.sheet_view.rightToLeft = True
+        except Exception:
+            pass
+        ws_m.append([
+            'الرقم', 'التاريخ', 'القسم', 'الموقع', 'الوصف', 'الحالة',
+            'الأولوية', 'الفني المسؤول', 'الفني المنفّذ',
+            'تاريخ الإغلاق', 'الإجراء المتخذ'
+        ])
+        for _, row in df_m.iterrows():
+            rid = row['id']
+            ws_m.append([
+                f"TQ-{rid:04d}",
+                row['date'] or '',
+                row['dept'] or '',
+                row['office_name'] or '',
+                str(row['description'] or '')[:500],
+                row['status'] or '',
+                row['priority'] if 'priority' in row.index and row['priority'] else 'عادي',
+                row['assigned_to'] if 'assigned_to' in row.index and row['assigned_to'] else '',
+                row['tech_name'] or '',
+                row['closed_date'] if 'closed_date' in row.index and row['closed_date'] else '',
+                str(row['action_taken'] or '')[:500],
+            ])
+            # حفظ الصور
+            if row['img_before']:
+                try:
+                    zf.writestr(f"Photos/Maintenance/TQ-{rid:04d}/before.jpg", base64.b64decode(row['img_before']))
+                except Exception:
+                    pass
+            if row['img_after']:
+                try:
+                    zf.writestr(f"Photos/Maintenance/TQ-{rid:04d}/after.jpg", base64.b64decode(row['img_after']))
+                except Exception:
+                    pass
+
+        # ========== ورقة النظافة ==========
+        ws_c = wb.create_sheet("النظافة")
+        try:
+            ws_c.sheet_view.rightToLeft = True
+        except Exception:
+            pass
+        ws_c.append(['الرقم', 'التاريخ', 'المنطقة', 'نوع التنظيف', 'المنفّذ'])
+        for _, row in df_c.iterrows():
+            rid = row['id']
+            ws_c.append([
+                f"CL-{rid:04d}",
+                row['date'] or '',
+                row['area'] or '',
+                row['type'] or '',
+                row['tech_name'] if 'tech_name' in row.index and row['tech_name'] else '',
+            ])
+            if row['img_before']:
+                try:
+                    zf.writestr(f"Photos/Cleaning/CL-{rid:04d}/before.jpg", base64.b64decode(row['img_before']))
+                except Exception:
+                    pass
+            if row['img_after']:
+                try:
+                    zf.writestr(f"Photos/Cleaning/CL-{rid:04d}/after.jpg", base64.b64decode(row['img_after']))
+                except Exception:
+                    pass
+
+        # ========== ورقة الجولات اليومية ==========
+        ws_d = wb.create_sheet("الجولات_اليومية")
+        try:
+            ws_d.sheet_view.rightToLeft = True
+        except Exception:
+            pass
+        ws_d.append(['رقم الجولة', 'التاريخ', 'المنفّذ', 'البند', 'الحالة', 'ملاحظات'])
+        for _, row in df_d_items.iterrows():
+            bid = row['batch_id']
+            ws_d.append([
+                f"DC-{bid}",
+                row['date'] or '',
+                row['tech_name'] or '',
+                row['item'] or '',
+                row['status'] or '',
+                str(row['notes'] or '')[:500],
+            ])
+            if row['photo']:
+                try:
+                    # تنظيف اسم البند لاستخدامه في اسم الملف
+                    item_clean = "".join(c for c in str(row['item'] or 'item') if c.isalnum() or c in (' ', '_', '-'))[:50] or "item"
+                    item_clean = item_clean.strip().replace(' ', '_')
+                    zf.writestr(
+                        f"Photos/Daily_Checks/DC-{bid}/{item_clean}_{row['id']}.jpg",
+                        base64.b64decode(row['photo'])
+                    )
+                except Exception:
+                    pass
+
+        # ========== تنسيق الأوراق ==========
+        for ws in [ws_m, ws_c, ws_d]:
+            # تنسيق رأس الجدول
+            for cell in ws[1]:
+                cell.font = Font(bold=True, color="FFFFFF", size=11)
+                cell.fill = PatternFill(start_color="1B3A6B", end_color="1B3A6B", fill_type="solid")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            # تنسيق المحاذاة لكل البيانات
+            for row_cells in ws.iter_rows(min_row=2):
+                for cell in row_cells:
+                    cell.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
+            # ضبط عرض الأعمدة
+            for col in ws.columns:
+                max_length = 10
+                column_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        cell_len = len(str(cell.value or ''))
+                        if cell_len > max_length:
+                            max_length = cell_len
+                    except Exception:
+                        pass
+                ws.column_dimensions[column_letter].width = min(max_length + 3, 60)
+
+        # حفظ Excel داخل ZIP
+        excel_buffer = BytesIO()
+        wb.save(excel_buffer)
+        zf.writestr(
+            f"Monthly_Report_{date_from}_to_{date_to}.xlsx",
+            excel_buffer.getvalue()
+        )
+
+        # إضافة ملف README بداخل الـ ZIP
+        readme = f"""تقرير شهري
+==================
+الفترة: من {date_from} إلى {date_to}
+تاريخ الإصدار: {now_local().strftime('%Y-%m-%d %H:%M')}
+
+محتويات الملف:
+- Monthly_Report_{date_from}_to_{date_to}.xlsx : ملف Excel فيه 3 أوراق (الصيانة + النظافة + الجولات اليومية)
+- Photos/Maintenance/TQ-XXXX/ : صور كل بلاغ صيانة
+- Photos/Cleaning/CL-XXXX/    : صور كل سجل نظافة
+- Photos/Daily_Checks/DC-XX/  : صور كل جولة تفقد
+
+نظام إدارة المرافق - تقييم
+"""
+        zf.writestr("README.txt", readme)
+
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue()
 
 
 def require_admin():
@@ -743,6 +988,16 @@ def init_db():
         # ترقية: إضافة عمود closed_date لجدول الصيانة إن لم يكن موجوداً
         try:
             c.execute("ALTER TABLE maintenance ADD COLUMN closed_date TEXT")
+        except sqlite3.OperationalError:
+            pass
+        # ترقية: إضافة عمود assigned_to لإسناد البلاغ لفني محدد
+        try:
+            c.execute("ALTER TABLE maintenance ADD COLUMN assigned_to TEXT")
+        except sqlite3.OperationalError:
+            pass
+        # ترقية: إضافة عمود priority لتصنيف الأولوية
+        try:
+            c.execute("ALTER TABLE maintenance ADD COLUMN priority TEXT DEFAULT 'عادي'")
         except sqlite3.OperationalError:
             pass
 
@@ -904,13 +1159,42 @@ if choice == t("m_dashboard"):
         dc_batches = conn.execute(
             "SELECT COUNT(DISTINCT batch_id) FROM daily_checks"
         ).fetchone()[0]
+        # البلاغات المتأخرة (3+ أيام بدون إغلاق)
+        from datetime import timedelta as _td
+        _cutoff = (now_local() - _td(days=3)).strftime("%Y-%m-%d %H:%M")
+        late_reports = pd.read_sql_query(
+            "SELECT id, date, office_name, dept, priority, assigned_to FROM maintenance "
+            "WHERE status=? AND date < ? ORDER BY date ASC",
+            conn, params=(Status.PENDING, _cutoff)
+        )
 
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric(t("metric_total"), m_count)
-    col2.metric(t("metric_pending"), pending)
+    col2.metric(t("metric_pending"), pending, delta=f"-{len(late_reports)} متأخر" if len(late_reports) > 0 else None, delta_color="inverse")
     col3.metric(t("metric_done"), done)
     col4.metric(t("metric_cleaning"), c_count)
     col5.metric(t("metric_inspections"), dc_batches)
+
+    # قسم تنبيه البلاغات المتأخرة
+    if not late_reports.empty:
+        st.divider()
+        st.error(f"⚠️ يوجد **{len(late_reports)}** بلاغ متأخر (أكثر من 3 أيام بدون إغلاق)")
+        with st.expander("📋 عرض البلاغات المتأخرة", expanded=True):
+            for _, _r in late_reports.iterrows():
+                _pri = _r['priority'] or 'عادي'
+                _pri_emoji = '🔴' if _pri == 'عاجل' else ('⚪' if _pri == 'منخفض' else '🟢')
+                _ass = _r['assigned_to'] or 'بدون إسناد'
+                # حساب عدد الأيام
+                try:
+                    _date_obj = datetime.strptime(_r['date'], "%Y-%m-%d %H:%M")
+                    _days = (now_local().replace(tzinfo=None) - _date_obj).days
+                except Exception:
+                    _days = '?'
+                st.markdown(
+                    f"- {_pri_emoji} **TQ-{_r['id']:04d}** | {tr_display(_r['dept'])} | "
+                    f"{_r['office_name']} | منذ **{_days}** يوم | 👤 {_ass}"
+                )
+
     st.divider()
     st.info(t("welcome", st.session_state.username, st.session_state.user_role))
 
@@ -926,20 +1210,49 @@ elif choice == t("m_maintenance"):
         else:
             # حقل التاريخ المخصص (خارج النموذج لأن checkbox يحتاج rerun)
             _maint_date = custom_date_input("maint_open")
+
+            # جلب قائمة الفنيين المتاحين للإسناد (المدير + المشرف فقط يقدرون يسندون)
+            _can_assign = st.session_state.get('user_role') in (Role.ADMIN, Role.SUPERVISOR)
+            _technicians = []
+            if _can_assign:
+                with get_db() as conn:
+                    _techs_df = pd.read_sql_query(
+                        "SELECT username FROM users WHERE role IN (?, ?, ?, ?) ORDER BY username",
+                        conn, params=(Role.TECH_MAINT, Role.TECH, "فني صيانة", "فني")
+                    )
+                _technicians = _techs_df['username'].tolist()
+
             with st.form("add_maintenance"):
                 dept  = st.selectbox(t("dept"), ["تكييف", "كهرباء", "سباكة", "نجارة", "أخرى"], format_func=tr_display)
                 loc   = st.text_input(t("location_label"))
                 desc  = st.text_area(t("problem_desc"))
+                # تصنيف الأولوية
+                priority = st.selectbox(
+                    t("priority_label"),
+                    PRIORITIES,
+                    index=1,  # افتراضياً: عادي
+                    format_func=tr_display
+                )
+                # إسناد الفني (المدير/المشرف فقط)
+                assigned = None
+                if _can_assign and _technicians:
+                    assigned = st.selectbox(
+                        t("assign_to_label"),
+                        [t("no_assignment")] + _technicians
+                    )
+                    if assigned == t("no_assignment"):
+                        assigned = None
                 img_b = st.file_uploader(t("photo_before_label"), type=['jpg', 'png', 'jpeg'])
                 if st.form_submit_button(t("submit_report"), use_container_width=True):
                     if loc and desc:
                         with get_db() as conn:
                             conn.execute(
-                                "INSERT INTO maintenance (date,dept,office_name,description,status,img_before) "
-                                "VALUES (?,?,?,?,?,?)",
+                                "INSERT INTO maintenance (date,dept,office_name,description,status,img_before,priority,assigned_to) "
+                                "VALUES (?,?,?,?,?,?,?,?)",
                                 (
                                     _maint_date,
-                                    dept, loc, desc, Status.PENDING, file_to_base64(img_b)
+                                    dept, loc, desc, Status.PENDING, file_to_base64(img_b),
+                                    priority, assigned
                                 )
                             )
                         st.success(t("report_sent"))
@@ -952,12 +1265,25 @@ elif choice == t("m_maintenance"):
         else:
             with get_db() as conn:
                 pending_tasks = pd.read_sql_query(
-                    "SELECT id, office_name, description FROM maintenance WHERE status=?",
+                    "SELECT id, office_name, description, priority, assigned_to FROM maintenance WHERE status=?",
                     conn, params=(Status.PENDING,)
                 )
+            # فلتر للفنيين: يشوفون فقط البلاغات المسندة لهم + غير المسندة
+            _current_user = st.session_state.get('username', '')
+            _user_role = st.session_state.get('user_role', '')
+            if _user_role in (Role.TECH_MAINT, Role.TECH):
+                pending_tasks = pending_tasks[
+                    (pending_tasks['assigned_to'].isna()) |
+                    (pending_tasks['assigned_to'] == _current_user)
+                ]
             if not pending_tasks.empty:
+                def _format_option(row):
+                    pri = row['priority'] or 'عادي'
+                    pri_emoji = '🔴' if pri == 'عاجل' else ('⚪' if pri == 'منخفض' else '🟢')
+                    assigned = f" [👤 {row['assigned_to']}]" if row['assigned_to'] else " [بدون إسناد]"
+                    return f"{pri_emoji} #{row['id']} - {row['office_name']}{assigned}"
                 options = {
-                    f"#{row['id']} - {row['office_name']}": row['id']
+                    _format_option(row): row['id']
                     for _, row in pending_tasks.iterrows()
                 }
                 selected = st.selectbox(t("select_report"), list(options.keys()))
@@ -1678,8 +2004,8 @@ elif choice == t("m_report_monthly"):
             )
             # جلب البنود التفصيلية مع الصور لكل جولة
             df_d_items = pd.read_sql_query(
-                "SELECT batch_id, item, status, photo FROM daily_checks "
-                "WHERE date >= ? AND date <= ? ORDER BY batch_id, id",
+                "SELECT id, batch_id, date, tech_name, item, status, photo, notes "
+                "FROM daily_checks WHERE date >= ? AND date <= ? ORDER BY batch_id, id",
                 conn,
                 params=(date_from.strftime("%Y-%m-%d"), date_to.strftime("%Y-%m-%d 23:59"))
             )
@@ -1797,13 +2123,29 @@ td{{padding:9px 8px;text-align:center;border:1px solid #e8ecf2;color:#333d4d;}}
 
         components.html(monthly_html, height=1100, scrolling=True)
         st.write("")
-        st.download_button(
-            t("download_monthly"),
-            monthly_html,
-            file_name=f"Monthly_{date_from}_{date_to}.html",
-            mime="text/html",
-            use_container_width=True
-        )
+
+        col_dl1, col_dl2 = st.columns(2)
+        with col_dl1:
+            st.download_button(
+                t("download_monthly"),
+                monthly_html,
+                file_name=f"Monthly_{date_from}_{date_to}.html",
+                mime="text/html",
+                use_container_width=True
+            )
+        with col_dl2:
+            st.caption(t("excel_zip_info"))
+            with st.spinner("جارٍ تحضير ملف ZIP..."):
+                _zip_data = create_excel_zip(df_m, df_c, df_d_items, date_from, date_to)
+            if _zip_data:
+                st.download_button(
+                    t("download_excel_zip"),
+                    _zip_data,
+                    file_name=f"Monthly_Report_{date_from}_to_{date_to}.zip",
+                    mime="application/zip",
+                    use_container_width=True,
+                    type="primary"
+                )
 
 # ===================== إدارة المستخدمين (مدير فقط) =====================
 
