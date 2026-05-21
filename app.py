@@ -183,6 +183,13 @@ LANGS = {
         "download_monthly": "📥 تحميل التقرير الشهري (HTML)",
         "download_cleaning": "📥 تحميل تقرير النظافة (HTML)",
         "download_excel_zip": "📤 تصدير Excel + الصور (ZIP)",
+        "download_pdf_small": "📄 PDF شامل (صور مصغّرة)",
+        "download_pdf_full": "📄 PDF تفصيلي (صور كاملة)",
+        "pdf_info": "ℹ️ تقرير PDF احترافي للطباعة والإرسال",
+        "pdf_downloading_font": "📥 جارٍ تحميل الخط العربي (مرة واحدة فقط)...",
+        "pdf_generating": "📄 جارٍ إنشاء ملف PDF...",
+        "pdf_size_warning": "⚠️ حجم الملف كبير ({} MB) - يتم ضغط الصور أكثر...",
+        "pdf_no_font": "⚠️ تعذّر تحميل الخط العربي. ضع ملف Amiri-Regular.ttf يدوياً في مجلد التطبيق.",
         "excel_zip_info": "ℹ️ ملف ZIP يحتوي على ملف Excel + الصور في مجلدات مرقمة برقم الطلب",
         "to_official_caption": "ℹ️ لإصدار تقرير رسمي مع التوقيع، انتقل إلى تقرير نظافة فردي.",
         # Defaults
@@ -345,6 +352,13 @@ LANGS = {
         "download_monthly": "📥 Download Monthly Report (HTML)",
         "download_cleaning": "📥 Download Cleaning Report (HTML)",
         "download_excel_zip": "📤 Export Excel + Photos (ZIP)",
+        "download_pdf_small": "📄 PDF Compact (small images)",
+        "download_pdf_full": "📄 PDF Detailed (full images)",
+        "pdf_info": "ℹ️ Professional PDF report",
+        "pdf_downloading_font": "📥 Downloading Arabic font (once only)...",
+        "pdf_generating": "📄 Generating PDF...",
+        "pdf_size_warning": "⚠️ File size is large ({} MB) - compressing images more...",
+        "pdf_no_font": "⚠️ Could not download Arabic font. Place Amiri-Regular.ttf manually in the app folder.",
         "excel_zip_info": "ℹ️ ZIP file contains Excel + photos in folders named by report number",
         "to_official_caption": "ℹ️ For an official report with signatures, go to Single Cleaning Report.",
         "default_org": " ",
@@ -885,6 +899,677 @@ def create_excel_zip(date_from, date_to) -> bytes:
     data = zip_buffer.getvalue()
     zip_buffer.close()
     return data
+
+
+# ============= PDF Generation =============
+
+# عدة مصادر للخط العربي - يجرّبهم بالترتيب
+ARABIC_FONT_URLS = [
+    "https://github.com/aliftype/amiri/raw/main/fonts/ttf/Amiri-Regular.ttf",
+    "https://github.com/aliftype/amiri/raw/master/fonts/ttf/Amiri-Regular.ttf",
+    "https://github.com/google/fonts/raw/main/ofl/amiri/Amiri-Regular.ttf",
+    "https://github.com/notofonts/arabic/raw/main/fonts/NotoSansArabic/full/ttf/NotoSansArabic-Regular.ttf",
+]
+
+# أسماء الملفات المقبولة (يبحث عنها محلياً)
+ACCEPTED_FONT_NAMES = [
+    "Amiri-Regular.ttf",
+    "amiri-regular.ttf",
+    "Cairo-Regular.ttf",
+    "NotoSansArabic-Regular.ttf",
+    "Tajawal-Regular.ttf",
+    "arabic.ttf",
+    "font.ttf",
+]
+
+
+def _ensure_arabic_font():
+    """ضمان وجود خط عربي - يبحث محلياً أولاً، ثم يحمّل."""
+    # 1. ابحث في المجلد الحالي عن أي خط عربي
+    for fname in ACCEPTED_FONT_NAMES:
+        if os.path.exists(fname):
+            return fname
+
+    # 2. ابحث في المجلد الفرعي fonts/
+    for fname in ACCEPTED_FONT_NAMES:
+        fp = os.path.join("fonts", fname)
+        if os.path.exists(fp):
+            return fp
+
+    # 3. ابحث في خطوط ويندوز الشائعة
+    windows_fonts = [
+        r"C:\Windows\Fontsrial.ttf",
+        r"C:\Windows\Fonts	ahoma.ttf",
+        r"C:\Windows\Fontsrabtype.ttf",
+        r"C:\Windows\Fonts	rado.ttf",
+    ]
+    for wf in windows_fonts:
+        if os.path.exists(wf):
+            return wf
+
+    # 4. حاول التحميل من عدة مصادر
+    target_path = "Amiri-Regular.ttf"
+    st.info(t("pdf_downloading_font"))
+    import urllib.request
+    for url in ARABIC_FONT_URLS:
+        try:
+            urllib.request.urlretrieve(url, target_path)
+            # تحقق أن الملف صحيح (حجم معقول)
+            if os.path.getsize(target_path) > 50000:  # على الأقل 50KB
+                st.success(f"✅ تم تحميل الخط من: {url[:60]}...")
+                return target_path
+            else:
+                os.remove(target_path)
+        except Exception:
+            continue
+
+    # 5. فشل كل المحاولات
+    st.error(
+        "⚠️ تعذّر تحميل الخط العربي تلقائياً.\n\n"
+        "**الحل:**\n"
+        "1. حمّل ملف خط عربي TTF (مثل Amiri أو Cairo)\n"
+        "2. ضعه في نفس مجلد التطبيق\n"
+        "3. سمّه `Amiri-Regular.ttf`\n\n"
+        "روابط للتحميل:\n"
+        "- https://fonts.google.com/specimen/Amiri\n"
+        "- https://fonts.google.com/specimen/Cairo"
+    )
+    return None
+
+
+def _ar_text(text):
+    """تحويل النص العربي لعرض صحيح في PDF (reshaping + RTL)."""
+    if not text:
+        return ""
+    try:
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+        reshaped = arabic_reshaper.reshape(str(text))
+        return get_display(reshaped)
+    except Exception:
+        return str(text)
+
+
+def _add_image_keep_ratio(pdf, img_bytes, x, y, max_w, max_h):
+    """يرسم صورة في PDF مع الحفاظ على نسبة الأبعاد الأصلية."""
+    if not img_bytes:
+        return 0
+    try:
+        from PIL import Image
+        img = Image.open(BytesIO(img_bytes))
+        iw, ih = img.size
+        if ih == 0:
+            return 0
+        ratio = iw / ih  # نسبة العرض/الارتفاع
+        # احسب أبعاد تتسع في max_w × max_h مع الحفاظ على النسبة
+        w = max_w
+        h = w / ratio
+        if h > max_h:
+            h = max_h
+            w = h * ratio
+        # رسم الصورة بأبعادها الصحيحة، متمركزة أفقياً
+        x_centered = x + (max_w - w) / 2
+        y_centered = y + (max_h - h) / 2
+        pdf.image(BytesIO(img_bytes), x=x_centered, y=y_centered, w=w, h=h)
+        return h
+    except Exception:
+        return 0
+
+
+def _compress_image_for_pdf(b64_str, max_dim=400, quality=60):
+    """ضغط صورة base64 لإضافتها في PDF بحجم صغير."""
+    if not b64_str:
+        return None
+    try:
+        from PIL import Image
+        img_data = base64.b64decode(b64_str)
+        img = Image.open(BytesIO(img_data))
+        if img.mode in ('RGBA', 'LA', 'P'):
+            bg = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            bg.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            img = bg
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
+        if max(img.size) > max_dim:
+            img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+        buf = BytesIO()
+        img.save(buf, format='JPEG', quality=quality, optimize=True)
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
+def create_pdf_report(date_from, date_to, full_images=False, target_size_mb=20):
+    """ينشئ تقرير PDF احترافي بجداول ملوّنة (مثل HTML)."""
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        st.error("⚠️ مكتبة fpdf2 غير مثبتة")
+        return b""
+
+    font_path = _ensure_arabic_font()
+    if not font_path:
+        return b""
+
+    # إعدادات الضغط حسب الوضع
+    if full_images:
+        img_max_dim, img_quality = 600, 70
+        img_w_mm = 30  # عرض الصورة في الجدول
+    else:
+        img_max_dim, img_quality = 200, 55
+        img_w_mm = 18
+
+    # ألوان (RGB)
+    COLOR_HEADER_BG = (27, 58, 107)       # كحلي للترويسة
+    COLOR_HEADER_TEXT = (255, 255, 255)   # أبيض
+    COLOR_GOLD = (201, 170, 95)           # ذهبي للتزيين
+    COLOR_ROW_EVEN = (247, 248, 250)      # رمادي فاتح
+    COLOR_ROW_ODD = (255, 255, 255)       # أبيض
+    COLOR_GREEN = (39, 174, 96)           # أخضر "تم"
+    COLOR_ORANGE = (230, 126, 34)         # برتقالي "معلق"
+    COLOR_BORDER = (221, 227, 236)        # حدود رمادية
+
+    def _is_done(s):
+        if not s:
+            return False
+        s = str(s).strip().lower()
+        return any(kw in s for kw in ['تم الإصلاح', 'مغلق', 'done', 'completed', 'closed', 'fixed'])
+
+    # جلب البيانات
+    df_from = date_from.strftime("%Y-%m-%d")
+    df_to = date_to.strftime("%Y-%m-%d 23:59")
+    with get_db() as conn:
+        df_m = pd.read_sql_query(
+            "SELECT * FROM maintenance WHERE date >= ? AND date <= ? ORDER BY id ASC",
+            conn, params=(df_from, df_to)
+        )
+        df_c = pd.read_sql_query(
+            "SELECT * FROM cleaning WHERE date >= ? AND date <= ? ORDER BY id ASC",
+            conn, params=(df_from, df_to)
+        )
+        df_d = pd.read_sql_query(
+            "SELECT batch_id, MIN(date) as date, tech_name, COUNT(*) as items_count "
+            "FROM daily_checks WHERE date >= ? AND date <= ? "
+            "GROUP BY batch_id ORDER BY batch_id ASC",
+            conn, params=(df_from, df_to)
+        )
+
+    total_m = len(df_m)
+    done_count = sum(1 for s in df_m.get('status', pd.Series([])).fillna('') if _is_done(s))
+    pend_count = total_m - done_count
+    pct = f"{(done_count/total_m*100):.0f}%" if total_m > 0 else "0%"
+
+    for attempt in range(3):
+        pdf = FPDF(orientation="L", unit="mm", format="A4")  # Landscape للجداول العريضة
+        font_name = "Arabic"
+        try:
+            pdf.add_font(font_name, "", font_path, uni=True)
+        except Exception:
+            font_name = "Helvetica"
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+
+        # ===== الترويسة =====
+        # شريط علوي ذهبي
+        pdf.set_fill_color(*COLOR_GOLD)
+        pdf.rect(0, 0, 297, 4, "F")
+        # خلفية الترويسة كحلية
+        pdf.set_fill_color(*COLOR_HEADER_BG)
+        pdf.rect(0, 4, 297, 22, "F")
+        # عنوان التقرير
+        pdf.set_y(8)
+        pdf.set_font(font_name, size=18)
+        pdf.set_text_color(*COLOR_HEADER_TEXT)
+        pdf.cell(0, 8, _ar_text("التقرير الشهري للمرافق"), align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font(font_name, size=10)
+        pdf.set_text_color(*COLOR_GOLD)
+        period = f"الفترة: {date_from.strftime('%Y-%m-%d')} — {date_to.strftime('%Y-%m-%d')}"
+        pdf.cell(0, 6, _ar_text(period), align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(8)
+
+        # ===== بطاقات الإحصائيات =====
+        pdf.set_text_color(50, 50, 50)
+        stats_data = [
+            (str(total_m), "إجمالي البلاغات", COLOR_HEADER_BG),
+            (str(done_count), "تم الإصلاح", COLOR_GREEN),
+            (str(pend_count), "قيد الانتظار", COLOR_ORANGE),
+            (str(len(df_c)), "مهام النظافة", (41, 128, 185)),
+            (str(len(df_d)), "الجولات التفقدية", (142, 68, 173)),
+            (pct, "نسبة الإنجاز", COLOR_GOLD),
+        ]
+        card_w = 45
+        card_h = 18
+        card_gap = 2
+        start_x = (297 - (card_w * 6 + card_gap * 5)) / 2
+        y_cards = pdf.get_y()
+        for i, (val, label, color) in enumerate(stats_data):
+            x = start_x + i * (card_w + card_gap)
+            # حدود
+            pdf.set_draw_color(*COLOR_BORDER)
+            pdf.set_line_width(0.3)
+            pdf.rect(x, y_cards, card_w, card_h)
+            # شريط علوي بلون البطاقة
+            pdf.set_fill_color(*color)
+            pdf.rect(x, y_cards, card_w, 1.5, "F")
+            # القيمة
+            pdf.set_xy(x, y_cards + 3)
+            pdf.set_font(font_name, size=16)
+            pdf.set_text_color(*color)
+            pdf.cell(card_w, 7, _ar_text(val), align="C")
+            # التسمية
+            pdf.set_xy(x, y_cards + 11)
+            pdf.set_font(font_name, size=8)
+            pdf.set_text_color(120, 120, 120)
+            pdf.cell(card_w, 5, _ar_text(label), align="C")
+        pdf.set_y(y_cards + card_h + 8)
+
+        # ===== دالة مساعدة لرسم جدول =====
+        def draw_table_header(pdf, headers, col_widths, font_name):
+            pdf.set_fill_color(*COLOR_HEADER_BG)
+            pdf.set_text_color(*COLOR_HEADER_TEXT)
+            pdf.set_font(font_name, size=9)
+            pdf.set_draw_color(*COLOR_HEADER_BG)
+            x = pdf.l_margin
+            y = pdf.get_y()
+            for h, w in zip(headers, col_widths):
+                pdf.set_xy(x, y)
+                pdf.cell(w, 8, _ar_text(h), align="C", fill=True, border=1)
+                x += w
+            pdf.set_y(y + 8)
+
+        def draw_row(pdf, cells, col_widths, font_name, row_idx, img_data_list=None):
+            """يرسم سطر من الجدول مع دعم الصور."""
+            bg = COLOR_ROW_EVEN if row_idx % 2 == 0 else COLOR_ROW_ODD
+            row_h = 14 if img_data_list else 7
+            x_start = pdf.l_margin
+            y_start = pdf.get_y()
+            # تحقق من المساحة المتبقية
+            if y_start + row_h > 195:
+                pdf.add_page()
+                return False  # نحتاج إعادة رسم رأس الجدول
+            pdf.set_fill_color(*bg)
+            pdf.set_draw_color(*COLOR_BORDER)
+            pdf.set_line_width(0.2)
+            pdf.set_text_color(50, 50, 50)
+            pdf.set_font(font_name, size=8)
+
+            x = x_start
+            for i, (cell, w) in enumerate(zip(cells, col_widths)):
+                pdf.set_xy(x, y_start)
+                # خلية فارغة بالخلفية
+                pdf.cell(w, row_h, "", fill=True, border=1)
+                # محتوى الخلية
+                if isinstance(cell, dict) and cell.get('type') == 'image' and cell.get('data'):
+                    try:
+                        img_w = min(w - 4, row_h * 1.3)
+                        img_h = row_h - 4
+                        img_x = x + (w - img_w) / 2
+                        img_y = y_start + 2
+                        pdf.image(BytesIO(cell['data']), x=img_x, y=img_y, w=img_w, h=img_h)
+                    except Exception:
+                        pdf.set_xy(x, y_start)
+                        pdf.cell(w, row_h, _ar_text("—"), align="C")
+                elif isinstance(cell, dict) and cell.get('type') == 'badge':
+                    pdf.set_fill_color(*cell['color'])
+                    pdf.set_text_color(255, 255, 255)
+                    badge_w = w - 4
+                    badge_h = 5
+                    badge_x = x + 2
+                    badge_y = y_start + (row_h - badge_h) / 2
+                    pdf.set_xy(badge_x, badge_y)
+                    pdf.cell(badge_w, badge_h, _ar_text(cell['text']), align="C", fill=True, border=0)
+                    pdf.set_fill_color(*bg)
+                    pdf.set_text_color(50, 50, 50)
+                else:
+                    pdf.set_xy(x, y_start)
+                    text = str(cell) if cell is not None else ""
+                    pdf.cell(w, row_h, _ar_text(text[:30]), align="C")
+                x += w
+            pdf.set_y(y_start + row_h)
+            return True
+
+        # ===== الصيانة =====
+        if not df_m.empty:
+            pdf.set_font(font_name, size=14)
+            pdf.set_text_color(*COLOR_HEADER_BG)
+            pdf.cell(0, 10, _ar_text("🛠️ بلاغات الصيانة"), align="R", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(2)
+
+            if full_images:
+                # ===== الوضع التفصيلي: بطاقة لكل بلاغ بصور كبيرة =====
+                for idx, (_, row) in enumerate(df_m.iterrows()):
+                    if pdf.get_y() > 105:
+                        pdf.add_page()
+
+                    status_done = _is_done(row.get('status', ''))
+                    status_color = COLOR_GREEN if status_done else COLOR_ORANGE
+                    y_card = pdf.get_y()
+                    card_h = 95  # ارتفاع أكبر لاستيعاب الصور بنسبتها الطبيعية
+
+                    # خلفية البطاقة
+                    pdf.set_fill_color(*COLOR_ROW_EVEN)
+                    pdf.rect(pdf.l_margin, y_card, 297 - 2 * pdf.l_margin, card_h, "F")
+                    # شريط جانبي بلون الحالة
+                    pdf.set_fill_color(*status_color)
+                    pdf.rect(297 - pdf.l_margin - 2, y_card, 2, card_h, "F")
+
+                    # ترويسة البطاقة
+                    pdf.set_xy(pdf.l_margin + 4, y_card + 3)
+                    pdf.set_font(font_name, size=12)
+                    pdf.set_text_color(*COLOR_HEADER_BG)
+                    pdf.cell(160, 6, _ar_text(
+                        f"TQ-{row['id']:04d}  |  {row.get('dept', '')}  |  {row.get('office_name', '')}"
+                    ), align="R")
+
+                    # شارة الحالة
+                    pdf.set_xy(pdf.l_margin + 170, y_card + 3)
+                    pdf.set_fill_color(*status_color)
+                    pdf.set_text_color(255, 255, 255)
+                    pdf.set_font(font_name, size=9)
+                    pdf.cell(30, 6, _ar_text("تم الإصلاح" if status_done else "قيد الانتظار"), align="C", fill=True, border=0)
+
+                    # المعلومات الفرعية
+                    pdf.set_xy(pdf.l_margin + 4, y_card + 11)
+                    pdf.set_font(font_name, size=8)
+                    pdf.set_text_color(80, 80, 80)
+                    info = f"التاريخ: {row.get('date', '')}  |  الفني: {row.get('tech_name') or '—'}"
+                    pdf.cell(200, 5, _ar_text(info), align="R")
+
+                    # الوصف
+                    desc = str(row.get('description', ''))[:150]
+                    if desc:
+                        pdf.set_xy(pdf.l_margin + 4, y_card + 17)
+                        pdf.set_font(font_name, size=9)
+                        pdf.set_text_color(60, 60, 60)
+                        pdf.multi_cell(200, 5, _ar_text(f"📝 {desc}"), align="R")
+
+                    # الإجراء
+                    action = str(row.get('action_taken') or '')[:150]
+                    if action:
+                        pdf.set_xy(pdf.l_margin + 4, y_card + 28)
+                        pdf.set_text_color(60, 60, 60)
+                        pdf.multi_cell(200, 5, _ar_text(f"✅ {action}"), align="R")
+
+                    # الصور الكبيرة - مع الحفاظ على النسبة
+                    img_y = y_card + 40
+                    img_max_w = 80
+                    img_max_h = 50  # ارتفاع أكبر للسماح بالصور العمودية
+                    img_b_data = _compress_image_for_pdf(row.get('img_before', ''), 800, 75)
+                    img_a_data = _compress_image_for_pdf(row.get('img_after', ''), 800, 75)
+                    actual_h_b = 0
+                    actual_h_a = 0
+                    if img_b_data:
+                        actual_h_b = _add_image_keep_ratio(pdf, img_b_data, pdf.l_margin + 4, img_y, img_max_w, img_max_h)
+                        pdf.set_xy(pdf.l_margin + 4, img_y + img_max_h + 1)
+                        pdf.set_font(font_name, size=8)
+                        pdf.set_text_color(*COLOR_ORANGE)
+                        pdf.cell(img_max_w, 4, _ar_text("⚠️ قبل"), align="C")
+                    if img_a_data:
+                        actual_h_a = _add_image_keep_ratio(pdf, img_a_data, pdf.l_margin + 90, img_y, img_max_w, img_max_h)
+                        pdf.set_xy(pdf.l_margin + 90, img_y + img_max_h + 1)
+                        pdf.set_font(font_name, size=8)
+                        pdf.set_text_color(*COLOR_GREEN)
+                        pdf.cell(img_max_w, 4, _ar_text("✅ بعد"), align="C")
+
+                    pdf.set_y(y_card + card_h + 3)
+            else:
+                # ===== الوضع المضغوط: جدول =====
+                headers = ["الرقم", "التاريخ", "القسم", "الموقع", "الحالة", "الفني", "قبل", "بعد"]
+                col_widths = [22, 30, 25, 40, 30, 30, img_w_mm + 8, img_w_mm + 8]
+                total_w = sum(col_widths)
+                scale = (297 - 20) / total_w
+                col_widths = [w * scale for w in col_widths]
+
+                draw_table_header(pdf, headers, col_widths, font_name)
+                for idx, (_, row) in enumerate(df_m.iterrows()):
+                    status_done = _is_done(row.get('status', ''))
+                    status_cell = {
+                        'type': 'badge',
+                        'text': 'تم' if status_done else 'معلق',
+                        'color': COLOR_GREEN if status_done else COLOR_ORANGE
+                    }
+                    img_b_data = _compress_image_for_pdf(row.get('img_before', ''), img_max_dim, img_quality)
+                    img_a_data = _compress_image_for_pdf(row.get('img_after', ''), img_max_dim, img_quality)
+
+                    cells = [
+                        f"TQ-{row['id']:04d}",
+                        str(row.get('date', ''))[:16],
+                        str(row.get('dept', '')),
+                        str(row.get('office_name', '')),
+                        status_cell,
+                        str(row.get('tech_name') or '—'),
+                        {'type': 'image', 'data': img_b_data},
+                        {'type': 'image', 'data': img_a_data},
+                    ]
+                    drawn = draw_row(pdf, cells, col_widths, font_name, idx, img_data_list=[img_b_data, img_a_data])
+                    if not drawn:
+                        draw_table_header(pdf, headers, col_widths, font_name)
+                        draw_row(pdf, cells, col_widths, font_name, idx, img_data_list=[img_b_data, img_a_data])
+            pdf.ln(6)
+
+        # ===== النظافة =====
+        if not df_c.empty:
+            pdf.add_page()
+            pdf.set_font(font_name, size=14)
+            pdf.set_text_color(*COLOR_HEADER_BG)
+            pdf.cell(0, 10, _ar_text("🧹 سجلات النظافة"), align="R", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(2)
+
+            if full_images:
+                # ===== بطاقات بصور كبيرة =====
+                for idx, (_, row) in enumerate(df_c.iterrows()):
+                    if pdf.get_y() > 115:
+                        pdf.add_page()
+                    y_card = pdf.get_y()
+                    card_h = 78  # ارتفاع أكبر للصور بنسبتها الطبيعية
+
+                    pdf.set_fill_color(*COLOR_ROW_EVEN)
+                    pdf.rect(pdf.l_margin, y_card, 297 - 2 * pdf.l_margin, card_h, "F")
+                    pdf.set_fill_color(*COLOR_GOLD)
+                    pdf.rect(297 - pdf.l_margin - 2, y_card, 2, card_h, "F")
+
+                    pdf.set_xy(pdf.l_margin + 4, y_card + 3)
+                    pdf.set_font(font_name, size=12)
+                    pdf.set_text_color(*COLOR_HEADER_BG)
+                    pdf.cell(200, 6, _ar_text(
+                        f"CL-{row['id']:04d}  |  {row.get('area', '')}  |  {row.get('type', '')}"
+                    ), align="R")
+
+                    pdf.set_xy(pdf.l_margin + 4, y_card + 11)
+                    pdf.set_font(font_name, size=8)
+                    pdf.set_text_color(80, 80, 80)
+                    info = f"التاريخ: {row.get('date', '')}  |  المنفذ: {row.get('tech_name') or '—'}"
+                    pdf.cell(200, 5, _ar_text(info), align="R")
+
+                    img_y = y_card + 20
+                    img_max_w = 80
+                    img_max_h = 50
+                    img_b_data = _compress_image_for_pdf(row.get('img_before', ''), 800, 75)
+                    img_a_data = _compress_image_for_pdf(row.get('img_after', ''), 800, 75)
+                    if img_b_data:
+                        _add_image_keep_ratio(pdf, img_b_data, pdf.l_margin + 4, img_y, img_max_w, img_max_h)
+                        pdf.set_xy(pdf.l_margin + 4, img_y + img_max_h + 1)
+                        pdf.set_font(font_name, size=8)
+                        pdf.set_text_color(*COLOR_ORANGE)
+                        pdf.cell(img_max_w, 3, _ar_text("⚠️ قبل"), align="C")
+                    if img_a_data:
+                        _add_image_keep_ratio(pdf, img_a_data, pdf.l_margin + 90, img_y, img_max_w, img_max_h)
+                        pdf.set_xy(pdf.l_margin + 90, img_y + img_max_h + 1)
+                        pdf.set_font(font_name, size=8)
+                        pdf.set_text_color(*COLOR_GREEN)
+                        pdf.cell(img_max_w, 3, _ar_text("✅ بعد"), align="C")
+
+                    pdf.set_y(y_card + card_h + 3)
+            else:
+                # ===== جدول مضغوط =====
+                headers = ["الرقم", "التاريخ", "المنطقة", "النوع", "المنفذ", "قبل", "بعد"]
+                col_widths = [22, 30, 50, 35, 35, img_w_mm + 8, img_w_mm + 8]
+                total_w = sum(col_widths)
+                scale = (297 - 20) / total_w
+                col_widths = [w * scale for w in col_widths]
+
+                draw_table_header(pdf, headers, col_widths, font_name)
+                for idx, (_, row) in enumerate(df_c.iterrows()):
+                    img_b_data = _compress_image_for_pdf(row.get('img_before', ''), img_max_dim, img_quality)
+                    img_a_data = _compress_image_for_pdf(row.get('img_after', ''), img_max_dim, img_quality)
+                    cells = [
+                        f"CL-{row['id']:04d}",
+                        str(row.get('date', ''))[:16],
+                        str(row.get('area', '')),
+                        str(row.get('type', '')),
+                        str(row.get('tech_name') or '—'),
+                        {'type': 'image', 'data': img_b_data},
+                        {'type': 'image', 'data': img_a_data},
+                    ]
+                    drawn = draw_row(pdf, cells, col_widths, font_name, idx, img_data_list=[img_b_data, img_a_data])
+                    if not drawn:
+                        draw_table_header(pdf, headers, col_widths, font_name)
+                        draw_row(pdf, cells, col_widths, font_name, idx, img_data_list=[img_b_data, img_a_data])
+            pdf.ln(6)
+
+        # ===== الجولات اليومية - بصور البنود =====
+        if not df_d.empty:
+            # جلب البنود التفصيلية مع الصور
+            with get_db() as conn:
+                df_d_items = pd.read_sql_query(
+                    "SELECT batch_id, MIN(date) as date, tech_name FROM daily_checks "
+                    "WHERE date >= ? AND date <= ? GROUP BY batch_id ORDER BY batch_id ASC",
+                    conn, params=(df_from, df_to)
+                )
+                df_items_all = pd.read_sql_query(
+                    "SELECT batch_id, item, status, photo, notes FROM daily_checks "
+                    "WHERE date >= ? AND date <= ? ORDER BY batch_id, id",
+                    conn, params=(df_from, df_to)
+                )
+
+            pdf.add_page()
+            pdf.set_font(font_name, size=14)
+            pdf.set_text_color(*COLOR_HEADER_BG)
+            pdf.cell(0, 10, _ar_text("✅ الجولات التفقدية اليومية"), align="R", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(2)
+
+            # لكل جولة، نعرضها كبطاقة منفصلة
+            for _, batch in df_d_items.iterrows():
+                bid = batch['batch_id']
+                items = df_items_all[df_items_all['batch_id'] == bid]
+                # تحقق من المساحة
+                needed_h = 25 + (len(items) * (35 if full_images else 18))
+                if pdf.get_y() + needed_h > 195:
+                    pdf.add_page()
+
+                # ترويسة الجولة
+                pdf.set_fill_color(*COLOR_HEADER_BG)
+                pdf.set_text_color(*COLOR_HEADER_TEXT)
+                pdf.set_font(font_name, size=10)
+                pdf.cell(0, 7, _ar_text(
+                    f"  DC-{bid}  |  {batch['date']}  |  المنفذ: {batch.get('tech_name', '—')}  |  {len(items)} بند"
+                ), align="R", fill=True, new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(1)
+
+                # عرض البنود
+                if full_images:
+                    # ===== الوضع التفصيلي: صور كبيرة لكل بند =====
+                    for idx, item_row in items.iterrows():
+                        if pdf.get_y() > 165:
+                            pdf.add_page()
+
+                        item_text = item_row['item'] or '—'
+                        status_text = item_row['status'] or '—'
+                        is_ok = 'سليم' in str(status_text) or 'ok' in str(status_text).lower()
+                        status_color = COLOR_GREEN if is_ok else COLOR_ORANGE
+
+                        # شريط البند
+                        bg = COLOR_ROW_EVEN
+                        pdf.set_fill_color(*bg)
+                        y_item = pdf.get_y()
+                        pdf.rect(pdf.l_margin, y_item, 297 - 2 * pdf.l_margin, 35, "F")
+
+                        # اسم البند يمين
+                        pdf.set_xy(pdf.l_margin + 2, y_item + 3)
+                        pdf.set_font(font_name, size=11)
+                        pdf.set_text_color(*COLOR_HEADER_BG)
+                        pdf.cell(120, 6, _ar_text(item_text), align="R")
+
+                        # شارة الحالة
+                        pdf.set_xy(pdf.l_margin + 130, y_item + 4)
+                        pdf.set_fill_color(*status_color)
+                        pdf.set_text_color(255, 255, 255)
+                        pdf.cell(30, 5, _ar_text(status_text), align="C", fill=True, border=0)
+
+                        # الصورة بنسبتها الطبيعية
+                        img_data = _compress_image_for_pdf(item_row.get('photo', ''), 800, 75)
+                        if img_data:
+                            _add_image_keep_ratio(pdf, img_data, pdf.l_margin + 170, y_item + 2, 50, 30)
+
+                        # ملاحظات
+                        notes = str(item_row.get('notes', '') or '')[:100]
+                        if notes:
+                            pdf.set_xy(pdf.l_margin + 2, y_item + 14)
+                            pdf.set_font(font_name, size=8)
+                            pdf.set_text_color(80, 80, 80)
+                            pdf.cell(160, 5, _ar_text(f"ملاحظات: {notes}"), align="R")
+
+                        pdf.set_y(y_item + 36)
+                else:
+                    # ===== الوضع المضغوط: جدول بصور صغيرة =====
+                    headers = ["البند", "الحالة", "الملاحظات", "صورة"]
+                    col_widths = [80, 35, 100, 30]
+                    total_w = sum(col_widths)
+                    scale = (297 - 20) / total_w
+                    col_widths = [w * scale for w in col_widths]
+
+                    draw_table_header(pdf, headers, col_widths, font_name)
+                    for ridx, (_, item_row) in enumerate(items.iterrows()):
+                        if pdf.get_y() > 190:
+                            pdf.add_page()
+                            draw_table_header(pdf, headers, col_widths, font_name)
+
+                        status_text = item_row['status'] or '—'
+                        is_ok = 'سليم' in str(status_text) or 'ok' in str(status_text).lower()
+                        status_cell = {
+                            'type': 'badge',
+                            'text': status_text,
+                            'color': COLOR_GREEN if is_ok else COLOR_ORANGE
+                        }
+                        img_data = _compress_image_for_pdf(item_row.get('photo', ''), 200, 55)
+                        cells = [
+                            str(item_row.get('item', ''))[:50],
+                            status_cell,
+                            str(item_row.get('notes', '') or '')[:60],
+                            {'type': 'image', 'data': img_data},
+                        ]
+                        draw_row(pdf, cells, col_widths, font_name, ridx, img_data_list=[img_data])
+                pdf.ln(3)
+            pdf.ln(3)
+
+        # ===== التذييل =====
+        pdf.set_y(-18)
+        pdf.set_fill_color(*COLOR_GOLD)
+        pdf.rect(0, pdf.get_y(), 297, 0.5, "F")
+        pdf.ln(2)
+        pdf.set_font(font_name, size=8)
+        pdf.set_text_color(150, 150, 150)
+        footer_text = f"تاريخ الإصدار: {now_local().strftime('%Y-%m-%d %H:%M')} | أُعدَّ بواسطة: {st.session_state.get('username', 'admin')}"
+        pdf.cell(0, 5, _ar_text(footer_text), align="C")
+
+        # حفظ PDF
+        pdf_bytes = pdf.output(dest="S")
+        if isinstance(pdf_bytes, str):
+            pdf_bytes = pdf_bytes.encode("latin1")
+        elif isinstance(pdf_bytes, bytearray):
+            pdf_bytes = bytes(pdf_bytes)
+
+        size_mb = len(pdf_bytes) / (1024 * 1024)
+        if size_mb <= target_size_mb:
+            return pdf_bytes
+
+        st.warning(t("pdf_size_warning", f"{size_mb:.1f}"))
+        img_max_dim = int(img_max_dim * 0.7)
+        img_quality = max(35, img_quality - 15)
+
+    return pdf_bytes
 
 
 def require_admin():
@@ -2046,8 +2731,14 @@ elif choice == t("m_report_monthly"):
             )
 
         total       = len(df_m)
-        done_count  = len(df_m[df_m['status'] == Status.DONE])
-        pend_count  = len(df_m[df_m['status'] == Status.PENDING])
+        # حساب مرن: أي حالة فيها "إصلاح" أو "Done" تعتبر مُغلقة
+        def _is_done_status(s):
+            if not s:
+                return False
+            s = str(s).strip().lower()
+            return any(kw in s for kw in ['تم الإصلاح', 'مغلق', 'مُغلق', 'done', 'completed', 'closed', 'fixed'])
+        done_count  = sum(1 for s in df_m['status'].fillna('') if _is_done_status(s))
+        pend_count  = total - done_count  # الباقي قيد الانتظار
         clean_count = len(df_c)
         daily_count = len(df_d)
         pct         = f"{(done_count/total*100):.0f}%" if total > 0 else "—"
@@ -2205,6 +2896,45 @@ td{{padding:9px 8px;text-align:center;border:1px solid #e8ecf2;color:#333d4d;}}
                 )
             else:
                 st.warning("⚠️ لا توجد بيانات في هذي الفترة")
+
+        st.divider()
+        st.subheader("📄 تصدير PDF")
+        st.caption(t("pdf_info"))
+
+        pdf_col1, pdf_col2 = st.columns(2)
+        with pdf_col1:
+            if st.button(t("download_pdf_small"), use_container_width=True, key="gen_pdf_small"):
+                with st.spinner(t("pdf_generating")):
+                    _pdf_data = create_pdf_report(date_from, date_to, full_images=False, target_size_mb=20)
+                if _pdf_data:
+                    st.session_state['_pdf_small'] = _pdf_data
+                    st.session_state['_pdf_small_name'] = f"Report_Compact_{date_from}_to_{date_to}.pdf"
+            if '_pdf_small' in st.session_state:
+                st.download_button(
+                    f"⬇️ تحميل ({len(st.session_state['_pdf_small'])/1024/1024:.1f} MB)",
+                    st.session_state['_pdf_small'],
+                    file_name=st.session_state['_pdf_small_name'],
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_pdf_small"
+                )
+
+        with pdf_col2:
+            if st.button(t("download_pdf_full"), use_container_width=True, key="gen_pdf_full"):
+                with st.spinner(t("pdf_generating")):
+                    _pdf_data = create_pdf_report(date_from, date_to, full_images=True, target_size_mb=20)
+                if _pdf_data:
+                    st.session_state['_pdf_full'] = _pdf_data
+                    st.session_state['_pdf_full_name'] = f"Report_Detailed_{date_from}_to_{date_to}.pdf"
+            if '_pdf_full' in st.session_state:
+                st.download_button(
+                    f"⬇️ تحميل ({len(st.session_state['_pdf_full'])/1024/1024:.1f} MB)",
+                    st.session_state['_pdf_full'],
+                    file_name=st.session_state['_pdf_full_name'],
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_pdf_full"
+                )
 
 # ===================== إدارة المستخدمين (مدير فقط) =====================
 
